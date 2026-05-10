@@ -1,52 +1,170 @@
-{%extends 'base.html'%}
+{% extends 'base.html' %} 
 {%load static%}
 {%block content%}
-<section class="login py-5 border-top-1">
+
+<style>
+    /* Navy & Gold Login Page Styles */
+    :root {
+        --navy-dark: #0A1628;
+        --navy-medium: #1B2B4E;
+        --navy-light: #243B67;
+        --gold-primary: #C5A028;
+        --gold-light: #F4B41A;
+        --gold-dark: #9E7E1F;
+    }
+
+    .ftco-section {
+        position: relative;
+        z-index: 1;
+        padding: 60px 0;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+    }
+
+    /* Visible container with background */
+    .login-card {
+        background: white;
+        border-radius: 24px;
+        box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+        padding: 48px 40px;
+        transition: transform 0.3s ease;
+    }
+
+    .login-card:hover {
+        transform: translateY(-5px);
+    }
+
+    .login-wrap h3 {
+        color: var(--navy-dark) !important;
+        font-weight: 700;
+        font-size: 28px;
+        margin-bottom: 30px !important;
+        text-align: center;
+    }
+
+    .form-control {
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        padding: 12px 16px;
+        font-size: 15px;
+        transition: all 0.3s;
+    }
+
+    .form-control:focus {
+        border-color: var(--gold-primary);
+        box-shadow: 0 0 0 3px rgba(197, 160, 40, 0.1);
+        outline: none;
+    }
+
+    .btn-primary {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        border: none;
+        border-radius: 12px;
+        padding: 12px;
+        font-size: 16px;
+        font-weight: 600;
+        color: var(--navy-dark);
+        transition: all 0.3s;
+        width: 100%;
+    }
+
+    .btn-primary:hover {
+        background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold-primary) 100%);
+        transform: translateY(-2px);
+        box-shadow: 0 10px 20px -5px rgba(197, 160, 40, 0.4);
+    }
+
+    .alert {
+        border-radius: 12px;
+        border-left: 4px solid;
+        font-size: 14px;
+        margin-bottom: 20px;
+    }
+
+    .alert-danger {
+        border-left-color: #dc2626;
+        background: #fee2e2;
+        color: #991b1b;
+    }
+
+    /* Close button */
+    .close {
+        color: var(--navy-dark);
+        opacity: 0.7;
+    }
+
+    .close:hover {
+        opacity: 1;
+    }
+
+    /* Welcome text styling */
+    .welcome-title {
+        text-align: center;
+        margin-bottom: 30px;
+    }
+
+    .welcome-title h2 {
+        color: var(--navy-dark);
+        font-weight: 700;
+        font-size: 32px;
+        margin-bottom: 8px;
+    }
+
+    .welcome-title p {
+        color: #64748b;
+        font-size: 14px;
+    }
+</style>
+
+<section class="ftco-section">
     <div class="container">
         <div class="row justify-content-center">
-            <div class="col-lg-5 col-md-8 align-item-center">
-                <div class="border">
-                    <h3 class="p-4">Login Now</h3>
-                    {% if state == 2 %}
-                    <div class="container">
+            <div class="col-md-6 col-lg-5">
+                <div class="login-card">
+                    <div class="login-wrap">
+                        
+                        <!-- Welcome Title -->
+                        <div class="welcome-title">
+                            <h2>Bienvenido</h2>
+                            <p>Ingrese sus credenciales para continuar</p>
+                        </div>
+
+                        {% if state == 2 %}
                         <div class="alert alert-danger alert-dismissible fade show" role="alert" id="alert">
+                            <i class="fa fa-exclamation-triangle" style="margin-right: 8px;"></i>
                             {{ message }}
                             <button type="button" class="close" data-dismiss="alert" aria-label="Close">
                                 <span aria-hidden="true">&times;</span>
-                              </button>
+                            </button>
+                        </div>
+                        {% endif %}
+
+                        <form action="/login/" class="signin-form" method="post">  
+                            {% csrf_token %}
+                            <div class="form-group">
+                                <input type="text" class="form-control" name="username" id="username" placeholder="Usuario / ID de Contador" required>
+                            </div>
+                            <div class="form-group">
+                                <input name="password" id="password" type="password" class="form-control" placeholder="Contraseña" required>
+                            </div>
+                            <div class="form-group">
+                                <button type="submit" class="form-control btn btn-primary submit px-3">
+                                    <i class="fa fa-sign-in" style="margin-right: 8px;"></i>
+                                    Iniciar Sesión
+                                </button>
+                            </div>
+                        </form>
+                        
+                        <div class="text-center mt-4">
+                            <p style="font-size: 11px; color: #94a3b8; margin: 0;">
+                                <i class="fa fa-shield-alt"></i> Aleman Guerra Contadores
+                            </p>
                         </div>
                     </div>
-
-                    {% endif %}
-                    <form action="/login/" method="post">
-                        {% csrf_token %}
-                        <fieldset class="p-4">
-
-                            <div class="form-group">
-                                <div class="form-outline">
-                                    <input type="text" name="username" id="username"
-                                        class="form-control form-control-lg" aria-describedby="Number of tracking"
-                                        autofocus required placeholder="Username" />
-                                    <label for="username" class="form-label">Username</label>
-                                </div>
-                            </div>
-                            <div class="form-group">
-                                <div class="form-outline">
-                                    <input name="password" id="password" type="password"
-                                        class="form-control form-control-lg" aria-describedby="Number of tracking"
-                                        autofocus required placeholder="Password" />
-                                    <label for="password" class="form-label">Password</label>
-                                </div>
-                            </div>
-
-                            <button type="submit"
-                                class="d-block py-3 px-5 bg-primary text-white border-0 rounded font-weight-bold mt-2">Log
-                                in</button>
-                        </fieldset>
-                    </form>
                 </div>
             </div>
         </div>
     </div>
 </section>
-{%endblock%}
+{% endblock %}

@@ -1,3 +1,13 @@
 Django==4.0.6
 psycopg2==2.8.6
 uWSGI==2.0.19.1
+django-import-export==2.8.0
+django-jazzmin==2.5.0
+django-sequences==2.7
+reportlab==3.5.64
+django-xhtml2pdf==0.0.4
+django-widget-tweaks==1.4.12
+django-o365mail==1.1.0
+xlwt==1.3.0
+python-dotenv==1.0.0
+xhtml2pdf==0.2.11

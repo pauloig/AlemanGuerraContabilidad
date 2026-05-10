@@ -1,142 +1,312 @@
+{% extends 'base.html' %}
 {% load static%}
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta http-equiv="X-UA-Compatible" content="IE=edge">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Wiring Connection</title>
+{% block content %}
 
-  
-    <!-- Google Fonts -->
-    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
-    <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css" />
-    <!-- Bootstrap -->
-    <link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/css/bootstrap.min.css"
-    integrity="sha384-Vkoo8x4CGsO3+Hhxv8T/Q5PaXtkKtu6ug5TOeNV6gBiFeWPGFN9MuhOf23Q9Ifjh" crossorigin="anonymous">
-    <!-- Ionicons -->
-    <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
+<style>
+    /* Dashboard specific styles */
+    .dashboard-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        transition: all 0.3s;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        height: 100%;
+        margin-bottom: 20px;
+    }
 
-    <!-- MDB -->
-    <link href="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.5.0/mdb.min.css" rel="stylesheet" />
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.3/css/all.min.css" />
-</head>
-<body>
+    .dashboard-card:hover {
+        transform: translateY(-5px);
+        box-shadow: 0 10px 30px rgba(0,0,0,0.1);
+    }
 
-  <script src="{% static 'plugins/jQuery/jquery.min.js'%}"></script>
+    .dashboard-card .icon-circle {
+        width: 60px;
+        height: 60px;
+        background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+        border-radius: 18px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        margin-bottom: 20px;
+    }
 
+    .dashboard-card .icon-circle i {
+        font-size: 28px;
+        color: #0A1628;
+    }
 
-    <div class="d-flex">
-        <div id="sidebar-container" class="bg-primary">
-          <div class="logo">
-            <a class="navbar-brand" href="/home/"><img src="{% static '/images/WC_logo.jpg' %}" alt=""
-                width="100px" /></a>
-          </div>
-          <a style="color: white;"><hr></a>
-          {% include 'partials/navbar.html' %}
-    
-        </div>
-    
-        <div class="w-100">
-          <nav class="navbar navbar-expand-lg navbar-light bg-light border-bottom">
+    .dashboard-card h3 {
+        font-size: 32px;
+        font-weight: 800;
+        color: #0A1628;
+        margin-bottom: 5px;
+    }
+
+    .dashboard-card p {
+        color: #64748b;
+        font-size: 14px;
+        margin-bottom: 10px;
+    }
+
+    .badge-gold {
+        background: rgba(197,160,40,0.15);
+        color: #C5A028;
+        padding: 4px 10px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 600;
+    }
+
+    .welcome-banner {
+        background: linear-gradient(135deg, #243B67 0%, #1B2B4E 100%);
+        border-radius: 20px;
+        padding: 30px;
+        margin-bottom: 30px;
+        position: relative;
+        overflow: hidden;
+        min-height: 180px;
+    }
+
+    .welcome-banner::before {
+        content: '';
+        position: absolute;
+        top: -50%;
+        right: -50%;
+        width: 200%;
+        height: 200%;
+        background: radial-gradient(circle, rgba(197,160,40,0.1) 0%, transparent 70%);
+    }
+
+    .welcome-banner h2 {
+        color: white;
+        font-size: 28px;
+        font-weight: 700;
+        margin-bottom: 10px;
+    }
+
+    .welcome-banner p {
+        color: rgba(255,255,255,0.8);
+        margin-bottom: 0;
+        font-size: 14px;
+    }
+
+    .welcome-banner .date {
+        color: #F4B41A;
+        font-size: 14px;
+        margin-top: 10px;
+    }
+
+    .table-container {
+        background: white;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        margin-bottom: 20px;
+    }
+
+    .table-container h4 {
+        color: #0A1628;
+        font-weight: 700;
+        margin-bottom: 20px;
+        padding-bottom: 15px;
+        border-bottom: 2px solid #C5A028;
+        display: inline-block;
+    }
+
+    .custom-table {
+        width: 100%;
+    }
+
+    .custom-table th {
+        color: #0A1628;
+        font-weight: 600;
+        font-size: 13px;
+        text-transform: uppercase;
+        padding: 12px 0;
+        border-bottom: 1px solid #e2e8f0;
+    }
+
+    .custom-table td {
+        padding: 12px 0;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+        font-size: 14px;
+    }
+
+    /* Contenedor para el contenido con padding inferior para el footer */
+    .content-wrapper {
+        padding-bottom: 100px;
+    }
+
+    /* Asegurar que las cards tengan altura consistente */
+    .row {
+        margin-bottom: 20px;
+    }
+</style>
+
+<div class="app-wrapper">
+    <!-- SIDEBAR -->
+    <div id="sidebar-container">
+        {% include 'partials/navbar.html' %}
+    </div>
+
+    <!-- MAIN CONTENT AREA -->
+    <div class="main-content-area">
+        <!-- TOP BAR FIJO -->
+        <div class="top-navbar-fixed">
             <h3>
-              {% if app_selected == 1 %} Receiving {% endif %}
-              {% if app_selected == 2 %} Inspection {% endif %}
-              {% if app_selected == 3 %} Outbound {% endif %}
-              {% if app_selected == 4 %} Outbound Report {% endif %}
-              {% if app_selected == 5 %} Upload files {% endif %}
-              {% if app_selected == 6 %} Classification {% endif %}
-              {% if app_selected == 7 %} Fulfillment Center {% endif %}
-              {% if app_selected == 8 %} Containers {% endif %}
-              {% if app_selected == 9 %} History classification {% endif %}
-              {% if app_selected == 10 %} User activity {% endif %}
-              
-            </h3>         
-            <button class="navbar-toggler" type="button" data-toggle="collapse" data-target="#navbarSupportedContent"
-              aria-controls="navbarSupportedContent" aria-expanded="false" aria-label="Toggle navigation">
-              <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="navbarSupportedContent">
-              <ul class="navbar-nav ml-auto">
-                <li class="nav-item dropdown">
-                  {% if user.is_authenticated %}
-                      <a class="nav-link dropdown-toggle" href="#" id="navbarDropdown" role="button" data-toggle="dropdown"
-                        aria-haspopup="true" aria-expanded="false">
-                        <i class="icon ion-md-contact lead"></i>
+                <i class="fas fa-chart-line"></i> Panel de Control
+            </h3>
+            <div class="user-controls">
+                {% if user.is_authenticated %}
+                    <span class="user-name">
+                        <i class="icon ion-md-contact"></i>
                         {{ user.username }}
-                      </a>
-                      <form id="logoutForm" action="/logout/" method="post" class="navbar-right">
+                    </span>
+                    <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
                         {% csrf_token %}
-                        <div class="dropdown-menu" aria-labelledby="navbarDropdown">
-                          <a class="dropdown-item" href="javascript:document.getElementById('logoutForm').submit()">Logout</a>
-                      </form>
-                  {% else %}
-                      <ul class="navbar-nav ml-auto mt-10">
-                        <li class="nav-item">
-                          <a class="nav-link login-button" href="/login/">Login</a>
-                        </li>
-                      </ul>
-                  {% endif %}
-                </li>
-              </ul>
-            </div>              
-          </nav>   
-          
-          
-          <div id="content2" class="{% if debug == "True" %} debug_style {% else %} {% endif %}">
-            <br />
-            {% include 'partials/modal.html' %}
-      
-            {% include 'partials/alerts.html' %}
-      
-            {% block container %}
-      
-            {% endblock %}
-      
-            
-            <br />
+                        <button type="submit" class="logout-btn">
+                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                        </button>
+                    </form>
+                {% else %}
+                    <a href="/login/" class="logout-btn" style="text-decoration: none;">
+                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+                    </a>
+                {% endif %}
+            </div>
+        </div>
 
-            <h1> WELCOME TO WIRING CONNECTION ADMIN</h1>
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-            <br />
-      
-      
-          </div>
-          {% include 'partials/footer.html' %}
+        <!-- CONTENIDO SCROLLABLE -->
+        <div class="scrollable-content">
+            <div class="content-wrapper">
+                {% include 'partials/modal.html' %}
+                {% include 'partials/alerts.html' %}
+                
+                <!-- Welcome Banner -->
+                <div class="welcome-banner">
+                    <div class="row align-items-center">
+                        <div class="col-md-8">
+                            <h2>
+                                <i class="fas fa-hand-wave"></i>
+                                ¡Bienvenido, {{ user.username|default:"Contador" }}!
+                            </h2>
+                            <p>Panel de control del sistema de gestión contable Aleman Guerra Contadores</p>
+                            <div class="date">
+                                <i class="fas fa-calendar-alt"></i> 
+                                <script>
+                                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                                    document.write(new Date().toLocaleDateString('es-ES', options));
+                                </script>
+                            </div>
+                        </div>
+                        <div class="col-md-4 text-center">
+                            <i class="fas fa-calculator" style="font-size: 80px; color: rgba(255,255,255,0.2);"></i>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Stats Cards -->
+                <div class="row">
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="icon-circle">
+                                <i class="fas fa-file-invoice-dollar"></i>
+                            </div>
+                            <h3>156</h3>
+                            <p>Facturas Procesadas</p>
+                            <span class="badge-gold"><i class="fas fa-chart-line"></i> +12% este mes</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="icon-circle">
+                                <i class="fas fa-boxes"></i>
+                            </div>
+                            <h3>2,340</h3>
+                            <p>Productos en Inventario</p>
+                            <span class="badge-gold"><i class="fas fa-check-circle"></i> Stock actual</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="icon-circle">
+                                <i class="fas fa-truck"></i>
+                            </div>
+                            <h3>89</h3>
+                            <p>Envíos Pendientes</p>
+                            <span class="badge-gold"><i class="fas fa-clock"></i> Por procesar</span>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="dashboard-card">
+                            <div class="icon-circle">
+                                <i class="fas fa-users"></i>
+                            </div>
+                            <h3>24</h3>
+                            <p>Usuarios Activos</p>
+                            <span class="badge-gold"><i class="fas fa-user-check"></i> Conectados ahora</span>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Recent Activity Table -->
+                <div class="row">
+                    <div class="col-md-12">
+                        <div class="table-container">
+                            <h4>
+                                <i class="fas fa-history" style="margin-right: 10px;"></i>
+                                Actividad Reciente
+                            </h4>
+                            <table class="custom-table">
+                                <thead>
+                                    <tr>
+                                        <th>Usuario</th>
+                                        <th>Acción</th>
+                                        <th>Módulo</th>
+                                        <th>Fecha</th>
+                                        <th>Estado</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td>{{ user.username|default:"contador" }}</td>
+                                        <td>Inicio de sesión</td>
+                                        <td>Sistema</td>
+                                        <td>Hoy</td>
+                                        <td><span class="badge-gold">Exitoso</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>usuario1</td>
+                                        <td>Actualización de inventario</td>
+                                        <td>Inventario</td>
+                                        <td>Ayer</td>
+                                        <td><span class="badge-gold">Completado</span></td>
+                                    </tr>
+                                    <tr>
+                                        <td>usuario2</td>
+                                        <td>Generación de reporte</td>
+                                        <td>Reportes</td>
+                                        <td>12 Mayo 2026</td>
+                                        <td><span class="badge-gold">Exitoso</span></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         
-    
-        
-      </div>
-      <script type="text/javascript" src="https://malsup.github.io/jquery.blockUI.js"></script>
-      <script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.5.0/mdb.min.js"></script>
-      <!--
-        <script src="https://code.jquery.com/jquery-3.4.1.slim.min.js"
-          integrity="sha384-J6qa4849blE2+poT4WnyKhv5vZF5SrPo0iEjwBvKU7imGFAV0wwj1yYfoRSJoZ+n"
-          crossorigin="anonymous"></script> 
-      -->
-           
-        <script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"
-          integrity="sha384-Q6E9RHvbIyZFJoft+2mJbHaEWldlvI9IOYy5n3zV9zzTtmI3UksdQRVvoxMfooAo"
-          crossorigin="anonymous"></script>          
-        <script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"
-          integrity="sha384-wfSDF2E50Y2D1uUdj0O3uMBJnjuUD4Ih7YwaYd1iqfktj0Uod8GCExl3Og8ifwB6"
-          crossorigin="anonymous"></script>
-        <script src="{% static '/scripts/main140721.js' %}"></script>
-        <!--<script src="{% static '/scripts/jquery.blockUI.js' %}"></script>-->
-</body>
-</html>
+        <!-- FOOTER FIJO -->
+        {% include 'partials/footer.html' %}
+    </div>
+</div>
+
+<script type="text/javascript" src="https://malsup.github.io/jquery.blockUI.js"></script>
+<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.5.0/mdb.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>          
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
+<script src="{% static '/scripts/main140721.js' %}"></script>
+
+{% endblock %}

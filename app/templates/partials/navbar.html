@@ -1,20 +1,364 @@
 {%load static%}
 
 <div class="menu">
-    <a aria-current="page" class="d-block text-light p-2 {% if app_selected == 7 %} active {% endif %}" href="#"><i
-        class="icon ion-md-business mr-2 lead" lead></i> menu 0</a>
-  <a style="color: white;"><hr></a>
-  <a aria-current="page" class="d-block text-light p-2 {% if app_selected == 7 %} active {% endif %}" href="#"><i
-    class="icon ion-md-business mr-2 lead" lead></i> Menu 1</a>
-<a style="color: white;"><hr></a>
-<a aria-current="page" class="d-block text-light p-2 {% if app_selected == 7 %} active {% endif %}" href="#"><i
-  class="icon ion-md-business mr-2 lead" lead></i> Menu 2</a>
-<a style="color: white;"><hr></a>
-<a aria-current="page" class="d-block text-light p-2 {% if app_selected == 7 %} active {% endif %}" href="#"><i
-  class="icon ion-md-business mr-2 lead" lead></i> Menu 3</a>
-<a style="color: white;"><hr></a>
+    <!-- Inicio -->
+    <a class="menu-item {% if request.resolver_match.url_name == 'home' or app_selected == 1 %}active{% endif %}" 
+       href="/home/" 
+       data-tooltip="Inicio"
+       data-menu="inicio"
+       onclick="return setActiveMenu(this, event);">
+        <i class="icon ion-md-home"></i> <span>Inicio</span>
+    </a>
+    <hr>
+    
+    <!-- Reportes con submenú -->
+    <div class="menu-item has-submenu" data-tooltip="Reportes" data-menu="reportes" onclick="toggleSubmenu(this, event)">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div>
+                <i class="icon ion-md-document"></i> <span>Reportes</span>
+            </div>
+            <i class="icon ion-md-arrow-forward arrow" style="font-size: 14px;"></i>
+        </div>
+    </div>
+    <div class="submenu" data-parent="reportes">
+        <a href="#" data-tooltip="Reporte Financiero" data-submenu="reporte_financiero" data-parent-menu="reportes" onclick="return setActiveMenu(this, event, 'reportes')">
+            <i class="icon ion-md-stats"></i> <span>Reporte Financiero</span>
+        </a>
+        <a href="#" data-tooltip="Reporte de Inventario" data-submenu="reporte_inventario" data-parent-menu="reportes" onclick="return setActiveMenu(this, event, 'reportes')">
+            <i class="icon ion-md-pie"></i> <span>Reporte de Inventario</span>
+        </a>
+        <a href="#" data-tooltip="Reporte de Ventas" data-submenu="reporte_ventas" data-parent-menu="reportes" onclick="return setActiveMenu(this, event, 'reportes')">
+            <i class="icon ion-md-trending-up"></i> <span>Reporte de Ventas</span>
+        </a>
+    </div>
+    <hr>
+    
+    <!-- Configuración con submenú -->
+    <div class="menu-item has-submenu" data-tooltip="Configuración" data-menu="configuracion" onclick="toggleSubmenu(this, event)">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div>
+                <i class="icon ion-md-settings"></i> <span>Configuración</span>
+            </div>
+            <i class="icon ion-md-arrow-forward arrow" style="font-size: 14px;"></i>
+        </div>
+    </div>
+    <div class="submenu" data-parent="configuracion">
+        <a href="#" data-tooltip="Perfil de Usuario" data-submenu="perfil" data-parent-menu="configuracion" onclick="return setActiveMenu(this, event, 'configuracion')">
+            <i class="icon ion-md-person"></i> <span>Perfil de Usuario</span>
+        </a>
+        <a href="#" data-tooltip="Seguridad" data-submenu="seguridad" data-parent-menu="configuracion" onclick="return setActiveMenu(this, event, 'configuracion')">
+            <i class="icon ion-md-lock"></i> <span>Seguridad</span>
+        </a>
+        <a href="#" data-tooltip="Notificaciones" data-submenu="notificaciones" data-parent-menu="configuracion" onclick="return setActiveMenu(this, event, 'configuracion')">
+            <i class="icon ion-md-notifications"></i> <span>Notificaciones</span>
+        </a>
+    </div>
+    <hr>
+    
+    <!-- Gestión con submenú -->
+    <div class="menu-item has-submenu" data-tooltip="Gestión" data-menu="gestion" onclick="toggleSubmenu(this, event)">
+        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+            <div>
+                <i class="icon ion-md-business"></i> <span>Gestión</span>
+            </div>
+            <i class="icon ion-md-arrow-forward arrow" style="font-size: 14px;"></i>
+        </div>
+    </div>
+    <div class="submenu" data-parent="gestion">
+        <a href="#" data-tooltip="Recepción" data-submenu="recepcion" data-parent-menu="gestion" onclick="return setActiveMenu(this, event, 'gestion')">
+            <i class="icon ion-md-checkmark-circle"></i> <span>Recepción</span>
+        </a>
+        <a href="#" data-tooltip="Envíos" data-submenu="envios" data-parent-menu="gestion" onclick="return setActiveMenu(this, event, 'gestion')">
+            <i class="icon ion-md-car"></i> <span>Envíos</span>
+        </a>
+        <a href="#" data-tooltip="Clasificación" data-submenu="clasificacion" data-parent-menu="gestion" onclick="return setActiveMenu(this, event, 'gestion')">
+            <i class="icon ion-md-folder"></i> <span>Clasificación</span>
+        </a>
+        <a href="{% url 'user_list' %}" data-tooltip="Usuarios" data-submenu="usuarios" data-parent-menu="gestion" onclick="return setActiveMenu(this, event, 'gestion')">
+            <i class="icon ion-md-people"></i> <span>Usuarios</span>
+        </a>
+    </div>
+    <hr>
+    
+    <!-- Ayuda (sin submenú) -->
+    <a href="#" data-tooltip="Ayuda" data-menu="ayuda" onclick="return setActiveMenu(this, event);">
+        <i class="icon ion-md-help-circle"></i> <span>Ayuda</span>
+    </a>
 </div>
 
-     
+<button class="sidebar-toggle" onclick="toggleSidebar()">
+    <i class="icon ion-md-menu"></i>
+</button>
 
+<style>
+    /* Estilo para el submenú seleccionado */
+    .menu .submenu a.submenu-active {
+        background: rgba(197, 160, 40, 0.2) !important;
+        color: var(--gold-light) !important;
+        font-weight: 600;
+        border-left: 3px solid var(--gold-primary);
+    }
+    
+    .menu .submenu a.submenu-active i {
+        color: var(--gold-light);
+    }
+    
+    /* Estilo para el menú padre cuando hay un submenú seleccionado */
+    .menu .has-submenu.parent-with-active {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%) !important;
+        color: var(--navy-dark) !important;
+        font-weight: 700;
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+    }
+    
+    .menu .has-submenu.parent-with-active i {
+        color: var(--navy-dark);
+    }
+    
+    .menu .has-submenu.parent-with-active .arrow {
+        color: var(--navy-dark);
+    }
+</style>
 
+<script>
+    // Limpiar todos los estilos activos de submenús
+    function clearAllActiveSubmenuStyles() {
+        // Limpiar clase active de todos los padres
+        document.querySelectorAll('.menu .has-submenu').forEach(parent => {
+            parent.classList.remove('active', 'parent-with-active');
+        });
+        // Limpiar clase submenu-active de todos los submenús
+        document.querySelectorAll('.menu .submenu a').forEach(subitem => {
+            subitem.classList.remove('submenu-active');
+            subitem.style.fontWeight = '';
+            subitem.style.background = '';
+        });
+    }
+    
+    // Marcar un submenú específico como activo (con clase CSS)
+    function markSubmenuActive(parentMenuName, submenuId) {
+        // Marcar el padre como activo (clase CSS para fondo dorado)
+        const parentMenuItem = document.querySelector(`.menu .has-submenu[data-menu="${parentMenuName}"]`);
+        if (parentMenuItem) {
+            parentMenuItem.classList.add('active', 'parent-with-active');
+        }
+        // Marcar el submenú como activo (con clase CSS)
+        const activeSubmenuItem = document.querySelector(`.menu a[data-submenu="${submenuId}"]`);
+        if (activeSubmenuItem) {
+            activeSubmenuItem.classList.add('submenu-active');
+        }
+    }
+    
+    // Función para manejar la selección de menús
+    function setActiveMenu(selectedLink, event, parentMenuName = null) {
+        if (event) event.preventDefault();
+        
+        // 1. Limpiar TODOS los activos
+        const allMenuItems = document.querySelectorAll('.menu > .menu-item, .menu > a');
+        allMenuItems.forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // 2. Limpiar todos los estilos de submenús
+        clearAllActiveSubmenuStyles();
+        
+        // 3. Limpiar localStorage de selecciones anteriores
+        localStorage.removeItem('activeMenu');
+        localStorage.removeItem('activeParentMenu');
+        localStorage.removeItem('activeSubmenu');
+        
+        // 4. Si es un submenú
+        if (selectedLink.closest('.submenu')) {
+            // Obtener el padre (has-submenu)
+            const parentMenuItem = selectedLink.closest('.submenu').previousElementSibling;
+            if (parentMenuItem && parentMenuItem.classList) {
+                // Activar el padre con la clase correcta
+                parentMenuItem.classList.add('active', 'parent-with-active');
+            }
+            
+            // Guardar en localStorage
+            const submenuId = selectedLink.getAttribute('data-submenu');
+            const parentId = parentMenuName || selectedLink.getAttribute('data-parent-menu');
+            if (submenuId && parentId) {
+                localStorage.setItem('activeParentMenu', parentId);
+                localStorage.setItem('activeSubmenu', submenuId);
+            }
+            
+            // Marcar visualmente el submenú con la clase CSS
+            if (submenuId && parentId) {
+                markSubmenuActive(parentId, submenuId);
+            }
+        } 
+        // 5. Si es un menú normal
+        else if (selectedLink.classList && !selectedLink.closest('.submenu')) {
+            selectedLink.classList.add('active');
+            const menuId = selectedLink.getAttribute('data-menu');
+            if (menuId) {
+                localStorage.setItem('activeMenu', menuId);
+            }
+        }
+        
+        // 6. Guardar el texto del menú para referencia
+        const menuText = selectedLink.querySelector('span')?.innerText || selectedLink.innerText;
+        localStorage.setItem('selectedMenu', menuText);
+        
+        // 7. Si es un enlace válido, navegar
+        const href = selectedLink.getAttribute('href');
+        if (href && href !== '#' && href !== '/home/') {
+            window.location.href = href;
+            return false;
+        }
+        if (href === '/home/') {
+            return true;
+        }
+        return false;
+    }
+    
+    // Función para toggle de submenús
+    function toggleSubmenu(element, event) {
+        if (event) event.stopPropagation();
+        
+        const isCurrentlyOpen = element.classList.contains('open');
+        const currentMenuId = element.getAttribute('data-menu');
+        
+        // Cerrar TODOS los submenús
+        const allSubmenus = document.querySelectorAll('.menu .has-submenu');
+        allSubmenus.forEach(submenu => {
+            submenu.classList.remove('open');
+            const siblingSubmenu = submenu.nextElementSibling;
+            if (siblingSubmenu && siblingSubmenu.classList.contains('submenu')) {
+                siblingSubmenu.classList.remove('open');
+            }
+        });
+        
+        // Si el que clickeamos NO estaba abierto, lo abrimos
+        if (!isCurrentlyOpen) {
+            element.classList.add('open');
+            const submenu = element.nextElementSibling;
+            if (submenu && submenu.classList.contains('submenu')) {
+                submenu.classList.add('open');
+            }
+            localStorage.setItem('openSubmenu', currentMenuId);
+        } else {
+            localStorage.removeItem('openSubmenu');
+        }
+    }
+    
+    // Función para toggle del sidebar
+    function toggleSidebar() {
+        const sidebar = document.getElementById('sidebar-container');
+        const mainContent = document.querySelector('.main-content-area');
+        const topBar = document.querySelector('.top-navbar-fixed');
+        
+        sidebar.classList.toggle('collapsed');
+        mainContent.classList.toggle('expanded');
+        topBar.classList.toggle('expanded');
+        
+        const isCollapsed = sidebar.classList.contains('collapsed');
+        localStorage.setItem('sidebarCollapsed', isCollapsed);
+        
+        if (isCollapsed) {
+            const allOpenSubmenus = document.querySelectorAll('.menu .has-submenu.open');
+            allOpenSubmenus.forEach(submenu => {
+                submenu.classList.remove('open');
+                const submenuContent = submenu.nextElementSibling;
+                if (submenuContent && submenuContent.classList.contains('submenu')) {
+                    submenuContent.classList.remove('open');
+                }
+            });
+            localStorage.removeItem('openSubmenu');
+        }
+    }
+    
+    // RESTAURAR ESTADO AL CARGAR LA PÁGINA
+    document.addEventListener('DOMContentLoaded', function() {
+        // 1. Restaurar estado del sidebar
+        const savedCollapsed = localStorage.getItem('sidebarCollapsed');
+        if (savedCollapsed === 'true') {
+            const sidebar = document.getElementById('sidebar-container');
+            const mainContent = document.querySelector('.main-content-area');
+            const topBar = document.querySelector('.top-navbar-fixed');
+            
+            sidebar.classList.add('collapsed');
+            mainContent.classList.add('expanded');
+            topBar.classList.add('expanded');
+        }
+        
+        // 2. Limpiar cualquier estado previo antes de restaurar
+        clearAllActiveSubmenuStyles();
+        document.querySelectorAll('.menu > .menu-item, .menu > a').forEach(item => {
+            item.classList.remove('active');
+        });
+        
+        // 3. Restaurar submenú abierto
+        const openSubmenu = localStorage.getItem('openSubmenu');
+        if (openSubmenu) {
+            const submenuToOpen = document.querySelector(`.menu .has-submenu[data-menu="${openSubmenu}"]`);
+            if (submenuToOpen && !submenuToOpen.classList.contains('open')) {
+                submenuToOpen.classList.add('open');
+                const submenuDiv = submenuToOpen.nextElementSibling;
+                if (submenuDiv && submenuDiv.classList.contains('submenu')) {
+                    submenuDiv.classList.add('open');
+                }
+            }
+        }
+        
+        // 4. Restaurar submenú activo (si existe)
+        const activeParentMenu = localStorage.getItem('activeParentMenu');
+        const activeSubmenu = localStorage.getItem('activeSubmenu');
+        
+        if (activeParentMenu && activeSubmenu) {
+            // Activar el padre y el submenú con clases CSS
+            markSubmenuActive(activeParentMenu, activeSubmenu);
+            
+            // Abrir el submenú del padre si es necesario
+            const parentMenuItem = document.querySelector(`.menu .has-submenu[data-menu="${activeParentMenu}"]`);
+            if (parentMenuItem && !parentMenuItem.classList.contains('open')) {
+                parentMenuItem.classList.add('open');
+                const submenuDiv = parentMenuItem.nextElementSibling;
+                if (submenuDiv && submenuDiv.classList.contains('submenu')) {
+                    submenuDiv.classList.add('open');
+                }
+            }
+        } else {
+            // Restaurar menú normal activo
+            const activeMenu = localStorage.getItem('activeMenu');
+            if (activeMenu) {
+                const menuItem = document.querySelector(`.menu a[data-menu="${activeMenu}"], .menu .has-submenu[data-menu="${activeMenu}"]`);
+                if (menuItem && !menuItem.classList.contains('has-submenu')) {
+                    menuItem.classList.add('active');
+                }
+            }
+        }
+        
+        // 5. Determinar qué menú debe estar activo basado en la URL actual
+        const currentUrl = window.location.pathname;
+        
+        if (currentUrl === '/home/' || currentUrl === '/') {
+            const homeLink = document.querySelector('.menu a[href="/home/"]');
+            if (homeLink) {
+                document.querySelectorAll('.menu > .menu-item, .menu > a').forEach(item => item.classList.remove('active'));
+                homeLink.classList.add('active');
+                localStorage.setItem('activeMenu', 'inicio');
+                localStorage.removeItem('activeParentMenu');
+                localStorage.removeItem('activeSubmenu');
+            }
+        } else if (currentUrl === '/usuarios/') {
+            // Limpiar primero
+            localStorage.removeItem('activeMenu');
+            // Activar Gestión -> Usuarios
+            markSubmenuActive('gestion', 'usuarios');
+            localStorage.setItem('activeParentMenu', 'gestion');
+            localStorage.setItem('activeSubmenu', 'usuarios');
+            // Abrir el submenú de Gestión
+            const gestionParent = document.querySelector('.menu .has-submenu[data-menu="gestion"]');
+            if (gestionParent && !gestionParent.classList.contains('open')) {
+                gestionParent.classList.add('open');
+                const submenuDiv = gestionParent.nextElementSibling;
+                if (submenuDiv && submenuDiv.classList.contains('submenu')) {
+                    submenuDiv.classList.add('open');
+                }
+            }
+        }
+    });
+</script>

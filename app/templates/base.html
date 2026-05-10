@@ -1,23 +1,23 @@
 {% load static%}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="es">
 <head>
 
   <!-- SITE TITTLE -->
   <meta charset="utf-8">
   <meta http-equiv="X-UA-Compatible" content="IE=edge">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Wiring Connection Admin</title>
+  <title>Aleman Guerra Contadores</title>
   
   <!-- FAVICON -->
   <link href="{% static 'img/favicon.png'%}" rel="shortcut icon">
   <!-- PLUGINS CSS STYLE -->
-  <!-- <link href="plugins/jquery-ui/jquery-ui.min.css" rel="stylesheet"> -->
-  <!-- Bootstrap -->
   <link rel="stylesheet" href="{% static 'plugins/bootstrap/css/bootstrap.min.css'%}">
   <link rel="stylesheet" href="{% static 'plugins/bootstrap/css/bootstrap-slider.css'%}">
   <!-- Font Awesome -->
   <link href="{% static 'plugins/font-awesome/css/font-awesome.min.css'%}" rel="stylesheet">
+  <!-- Ionicons -->
+  <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
   <!-- Owl Carousel -->
   <link href="{% static 'plugins/slick-carousel/slick/slick.css'%}" rel="stylesheet">
   <link href="{% static 'plugins/slick-carousel/slick/slick-theme.css'%}" rel="stylesheet">
@@ -28,8 +28,436 @@
   <link href="{% static 'css/style.css'%}" rel="stylesheet">
   
   <link rel="stylesheet" href="https://maxcdn.bootstrapcdn.com/font-awesome/4.4.0/css/font-awesome.min.css">
-  <!-- HTML5 shim and Respond.js for IE8 support of HTML5 elements and media queries -->
-  <!-- WARNING: Respond.js doesn't work if you view the page via file:// -->
+
+  <!-- NAVY & GOLD THEME - Custom Styles -->
+  <style>
+      :root {
+          --navy-dark: #0A1628;
+          --navy-medium: #1B2B4E;
+          --navy-light: #243B67;
+          --gold-primary: #C5A028;
+          --gold-light: #F4B41A;
+          --gold-dark: #9E7E1F;
+          --content-bg: #F5F7FA;
+          --sidebar-width: 224px;
+          --sidebar-collapsed-width: 70px;
+      }
+
+      * {
+          margin: 0;
+          padding: 0;
+          box-sizing: border-box;
+      }
+
+      body {
+          background: linear-gradient(135deg, var(--navy-dark) 0%, var(--navy-medium) 50%, var(--navy-light) 100%);
+          min-height: 100vh;
+          font-family: 'Roboto', sans-serif;
+          overflow: hidden;
+      }
+
+      /* Overlay pattern */
+      body::before {
+          content: '';
+          position: fixed;
+          top: 0;
+          left: 0;
+          width: 100%;
+          height: 100%;
+          background-image: url('data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><path fill="rgba(255,255,255,0.03)" d="M10,10 L20,10 L20,20 L10,20 Z M30,30 L40,30 L40,40 L30,40 Z M50,50 L60,50 L60,60 L50,60 Z M70,70 L80,70 L80,80 L70,80 Z"/></svg>');
+          background-repeat: repeat;
+          pointer-events: none;
+          z-index: 0;
+      }
+
+      /* LAYOUT PRINCIPAL */
+      .app-wrapper {
+          display: flex;
+          height: 100vh;
+          overflow: hidden;
+      }
+
+      /* SIDEBAR - FIJO CON TRANSICIÓN */
+      #sidebar-container {
+          width: var(--sidebar-width);
+          background: linear-gradient(180deg, var(--navy-dark) 0%, var(--navy-medium) 100%);
+          height: 100vh;
+          position: fixed;
+          left: 0;
+          top: 0;
+          overflow-y: auto;
+          overflow-x: hidden;
+          box-shadow: 4px 0 20px rgba(0,0,0,0.2);
+          z-index: 100;
+          transition: width 0.3s ease;
+      }
+
+      /* Sidebar colapsado */
+      #sidebar-container.collapsed {
+          width: var(--sidebar-collapsed-width);
+      }
+
+      /* Scrollbar personalizado para sidebar */
+      #sidebar-container::-webkit-scrollbar {
+          width: 5px;
+      }
+
+      #sidebar-container::-webkit-scrollbar-track {
+          background: rgba(255,255,255,0.1);
+      }
+
+      #sidebar-container::-webkit-scrollbar-thumb {
+          background: var(--gold-primary);
+          border-radius: 10px;
+      }
+
+      /* Botón toggle del sidebar - Mitad sobre sidebar, mitad sobre contenido */
+      .sidebar-toggle {
+          position: fixed;
+          top: 85px;
+          left: var(--sidebar-width);
+          transform: translateX(-50%);
+          background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+          border: 2px solid var(--navy-dark);
+          color: var(--navy-dark);
+          width: 40px;
+          height: 40px;
+          border-radius: 50%;
+          cursor: pointer;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          transition: all 0.3s ease;
+          z-index: 200;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+      }
+
+      .sidebar-toggle:hover {
+          background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold-primary) 100%);
+          transform: translateX(-50%) scale(1.1);
+          box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+      }
+
+      /* Cuando el sidebar está colapsado, el botón se mueve */
+      #sidebar-container.collapsed .sidebar-toggle {
+          left: var(--sidebar-collapsed-width);
+          transform: translateX(-50%) rotate(180deg);
+      }
+
+      #sidebar-container.collapsed .sidebar-toggle:hover {
+          transform: translateX(-50%) rotate(180deg) scale(1.1);
+      }
+
+      /* MAIN CONTENT AREA */
+      .main-content-area {
+          flex: 1;
+          margin-left: var(--sidebar-width);
+          display: flex;
+          flex-direction: column;
+          height: 100vh;
+          overflow: hidden;
+          background: var(--content-bg);
+          transition: margin-left 0.3s ease;
+          position: relative;
+      }
+
+      .main-content-area.expanded {
+          margin-left: var(--sidebar-collapsed-width);
+      }
+
+      /* TOP BAR - FIJO */
+      .top-navbar-fixed {
+          position: fixed;
+          top: 0;
+          right: 0;
+          left: var(--sidebar-width);
+          background: linear-gradient(90deg, var(--navy-light) 0%, var(--navy-medium) 100%);
+          border-bottom: 2px solid var(--gold-primary);
+          padding: 12px 30px;
+          z-index: 99;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+          height: 60px;
+          transition: left 0.3s ease-in-out;
+      }
+
+      .top-navbar-fixed.expanded {
+          left: var(--sidebar-collapsed-width);
+      }
+
+      .top-navbar-fixed h3 {
+          color: white;
+          margin: 0;
+          font-size: 20px;
+          font-weight: 600;
+      }
+
+      .top-navbar-fixed h3 i {
+          color: var(--gold-light);
+          margin-right: 10px;
+      }
+
+      .user-controls {
+          display: flex;
+          align-items: center;
+          gap: 15px;
+      }
+
+      .user-controls .user-name {
+          color: white;
+          text-decoration: none;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+      }
+
+      .user-controls .user-name i {
+          font-size: 24px;
+      }
+
+      .logout-btn {
+          background: rgba(197,160,40,0.2);
+          color: var(--gold-light);
+          border: none;
+          padding: 8px 16px;
+          border-radius: 10px;
+          cursor: pointer;
+          transition: all 0.3s;
+      }
+
+      .logout-btn:hover {
+          background: var(--gold-primary);
+          color: var(--navy-dark);
+      }
+
+      /* CONTENIDO SCROLLABLE */
+      .scrollable-content {
+          flex: 1;
+          overflow-y: auto;
+          overflow-x: hidden;
+          padding: 80px 30px 80px 30px;
+          background: var(--content-bg);
+          margin-top: 60px;
+      }
+
+      /* Scrollbar personalizado para contenido */
+      .scrollable-content::-webkit-scrollbar {
+          width: 8px;
+      }
+
+      .scrollable-content::-webkit-scrollbar-track {
+          background: rgba(0,0,0,0.05);
+          border-radius: 10px;
+      }
+
+      .scrollable-content::-webkit-scrollbar-thumb {
+          background: var(--gold-primary);
+          border-radius: 10px;
+      }
+
+      /* FOOTER - FIJO */
+      .footer-full-width {
+          background: linear-gradient(90deg, var(--navy-light) 0%, var(--navy-medium) 100%);
+          border-top: 2px solid var(--gold-primary);
+          padding: 15px 30px;
+          width: 100%;
+          box-shadow: 0 -2px 10px rgba(0,0,0,0.1);
+          border-radius: 0;
+          position: absolute;
+          bottom: 0;
+          left: 0;
+          right: 0;
+      }
+
+      .footer-full-width .footer-text {
+          color: white;
+          font-size: 14px;
+          font-weight: 500;
+      }
+
+      .footer-full-width .footer-small {
+          color: rgba(255,255,255,0.6);
+          font-size: 12px;
+      }
+
+      /* MENU STYLES */
+      .menu {
+          padding: 80px 0 20px 0;
+      }
+
+      .menu a, .menu .menu-item {
+          display: block;
+          text-decoration: none;
+          color: white !important;
+          padding: 10px 16px;
+          margin: 3px 12px;
+          border-radius: 10px;
+          transition: all 0.3s ease;
+          font-size: 13px;
+          font-weight: 500;
+          position: relative;
+          cursor: pointer;
+      }
+
+      /* Submenú */
+      .submenu {
+          padding-left: 35px;
+          max-height: 0;
+          overflow: hidden;
+          transition: max-height 0.3s ease;
+      }
+
+      .submenu.open {
+          max-height: 500px;
+      }
+
+      .submenu a {
+          font-size: 12px;
+          padding: 8px 16px;
+          margin: 2px 12px;
+      }
+
+      /* Icono de flecha para submenú */
+      .menu-item.has-submenu {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+      }
+
+      .menu-item.has-submenu .arrow {
+          transition: transform 0.3s;
+      }
+
+      .menu-item.has-submenu.open .arrow {
+          transform: rotate(90deg);
+      }
+
+      /* ESTADO NORMAL */
+      .menu a, .menu .menu-item {
+          background: transparent !important;
+      }
+
+      /* ESTADO HOVER */
+      .menu a:hover, .menu .menu-item:hover {
+          background: rgba(197, 160, 40, 0.1) !important;
+          color: var(--gold-light) !important;
+          transform: translateX(5px);
+      }
+
+      /* ESTADO ACTIVE */
+      .menu a.active, .menu .menu-item.active {
+          background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%) !important;
+          color: var(--navy-dark) !important;
+          font-weight: 700;
+          box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+      }
+
+      .menu a.active:hover, .menu .menu-item.active:hover {
+          transform: none;
+      }
+
+      /* Línea decorativa */
+      .menu a.active::before, .menu .menu-item.active::before {
+          content: '';
+          position: absolute;
+          left: 0;
+          top: 20%;
+          height: 60%;
+          width: 3px;
+          background: var(--navy-dark);
+          border-radius: 3px;
+      }
+
+      .menu a i, .menu .menu-item i {
+          margin-right: 10px;
+          font-size: 16px;
+          width: 22px;
+          text-align: center;
+      }
+
+      .menu hr {
+          margin: 6px 12px;
+          border-color: rgba(255,255,255,0.08);
+      }
+
+      /* Sidebar colapsado */
+      #sidebar-container.collapsed .menu span:not(.arrow) {
+          display: none;
+      }
+
+      #sidebar-container.collapsed .menu .submenu {
+          display: none;
+      }
+
+      #sidebar-container.collapsed .menu a,
+      #sidebar-container.collapsed .menu .menu-item {
+          text-align: center;
+          padding: 12px 0;
+      }
+
+      #sidebar-container.collapsed .menu a i,
+      #sidebar-container.collapsed .menu .menu-item i {
+          margin-right: 0;
+          font-size: 20px;
+      }
+
+      #sidebar-container.collapsed .menu-item.has-submenu {
+          justify-content: center;
+      }
+
+      #sidebar-container.collapsed .menu-item.has-submenu .arrow {
+          display: none;
+      }
+
+      /* Tooltip para sidebar colapsado */
+      #sidebar-container.collapsed .menu-item.has-submenu:hover::after,
+      #sidebar-container.collapsed .menu a:hover::after {
+          content: attr(data-tooltip);
+          position: absolute;
+          left: 70px;
+          top: 50%;
+          transform: translateY(-50%);
+          background: var(--gold-primary);
+          color: var(--navy-dark);
+          padding: 5px 10px;
+          border-radius: 5px;
+          font-size: 12px;
+          white-space: nowrap;
+          z-index: 200;
+          font-weight: 600;
+      }
+
+      /* Buttons */
+      .btn-primary {
+          background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+          border: none;
+          color: var(--navy-dark);
+          font-weight: 600;
+          transition: all 0.3s;
+      }
+
+      .btn-primary:hover {
+          background: linear-gradient(135deg, var(--gold-dark) 0%, var(--gold-primary) 100%);
+          transform: translateY(-2px);
+          box-shadow: 0 4px 10px rgba(197,160,40,0.3);
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+          :root {
+              --sidebar-width: 70px;
+          }
+          .menu span:not(.arrow) {
+              display: none;
+          }
+          .menu .submenu {
+              display: none;
+          }
+      }
+  </style>
+  
   <!--[if lt IE 9]>
   <script src="https://oss.maxcdn.com/html5shiv/3.7.2/html5shiv.min.js"></script>
   <script src="https://oss.maxcdn.com/respond/1.4.2/respond.min.js"></script>
@@ -37,35 +465,26 @@
 
 </head>
 
-<body class="">
-
+<body>
 
 {%block content%} 
 {%endblock%}
-
 
 <!-- JAVASCRIPTS -->
 <script src="{% static 'plugins/jQuery/jquery.min.js'%}"></script>
 <script src="{% static 'plugins/bootstrap/js/popper.min.js'%}"></script>
 <script src="{% static 'plugins/bootstrap/js/bootstrap.min.js'%}"></script>
 <script src="{% static 'plugins/bootstrap/js/bootstrap-slider.js'%}"></script>
-  <!-- tether js -->
 <script src="{% static 'plugins/tether/js/tether.min.js'%}"></script>
 <script src="{% static 'plugins/raty/jquery.raty-fa.js'%}"></script>
 <script src="{% static 'plugins/slick-carousel/slick/slick.min.js'%}"></script>
 <script src="{% static 'plugins/jquery-nice-select/js/jquery.nice-select.min.js'%}"></script>
 <script src="{% static 'plugins/fancybox/jquery.fancybox.pack.js'%}"></script>
 <script src="{% static 'plugins/smoothscroll/SmoothScroll.min.js'%}"></script>
-<!-- google map -->
 <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyCcABaamniA6OL5YvYSpB3pFMNrXwXnLwU&libraries=places"></script>
 <script src="{% static 'plugins/google-map/gmap.js'%}"></script>
 <script src="{% static 'js/script.js'%}"></script>
 <script src="{% static '/scripts/main140721.js' %}"></script>
 
-
 </body>
-
 </html>
-
-
-
