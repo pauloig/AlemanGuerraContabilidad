@@ -1,0 +1,28 @@
+{% load static %}
+
+<div class="top-navbar-fixed">
+    <div class="page-title">
+        {% block page_title_icon %}
+            <i class="fas fa-chart-line"></i>
+        {% endblock %}
+        <span>{% block page_title %}Panel de Control{% endblock %}</span>
+    </div>
+    <div class="user-controls">
+        {% if user.is_authenticated %}
+            <span class="user-name">
+                <i class="icon ion-md-contact"></i>
+                {{ user.username }}
+            </span>
+            <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
+                {% csrf_token %}
+                <button type="submit" class="logout-btn">
+                    <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
+                </button>
+            </form>
+        {% else %}
+            <a href="/login/" class="logout-btn" style="text-decoration: none;">
+                <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
+            </a>
+        {% endif %}
+    </div>
+</div>

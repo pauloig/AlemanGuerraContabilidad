@@ -50,6 +50,7 @@ INSTALLED_APPS = [
     'xhtml2pdf',
 
     'authentication',
+    'administracion',
 ]
 
 MIDDLEWARE = [

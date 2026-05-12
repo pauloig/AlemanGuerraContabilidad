@@ -15,7 +15,9 @@
   <link rel="stylesheet" href="{% static 'plugins/bootstrap/css/bootstrap.min.css'%}">
   <link rel="stylesheet" href="{% static 'plugins/bootstrap/css/bootstrap-slider.css'%}">
   <!-- Font Awesome -->
-  <link href="{% static 'plugins/font-awesome/css/font-awesome.min.css'%}" rel="stylesheet">
+    <link href="{% static 'plugins/font-awesome/css/font-awesome.min.css' %}" rel="stylesheet">
+    <!-- Font Awesome 6 (opcional, pero recomendado para fas) -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css">
   <!-- Ionicons -->
   <link href="https://unpkg.com/ionicons@4.5.10-0/dist/css/ionicons.min.css" rel="stylesheet">
   <!-- Owl Carousel -->
@@ -176,7 +178,7 @@
           padding: 12px 30px;
           z-index: 99;
           display: flex;
-          justify-content: space-between;
+          justify-content: flex-end;
           align-items: center;
           box-shadow: 0 2px 10px rgba(0,0,0,0.1);
           height: 60px;
@@ -185,18 +187,6 @@
 
       .top-navbar-fixed.expanded {
           left: var(--sidebar-collapsed-width);
-      }
-
-      .top-navbar-fixed h3 {
-          color: white;
-          margin: 0;
-          font-size: 20px;
-          font-weight: 600;
-      }
-
-      .top-navbar-fixed h3 i {
-          color: var(--gold-light);
-          margin-right: 10px;
       }
 
       .user-controls {
@@ -237,7 +227,7 @@
           flex: 1;
           overflow-y: auto;
           overflow-x: hidden;
-          padding: 80px 30px 80px 30px;
+          padding: 40px 30px 80px 30px;
           background: var(--content-bg);
           margin-top: 60px;
       }
@@ -284,11 +274,12 @@
 
       /* MENU STYLES */
       .menu {
-          padding: 80px 0 20px 0;
+          padding: 20px 0 20px 0;
       }
 
       .menu a, .menu .menu-item {
-          display: block;
+          display: flex;
+          align-items: center;
           text-decoration: none;
           color: white !important;
           padding: 10px 16px;
@@ -299,11 +290,37 @@
           font-weight: 500;
           position: relative;
           cursor: pointer;
+          min-height: 40px;
+      }
+
+      .menu a i, .menu .menu-item i {
+          margin-right: 12px;
+          font-size: 18px;
+          width: 24px;
+          text-align: center;
+          flex-shrink: 0;
+      }
+
+      .menu a span, .menu .menu-item span {
+          flex: 1;
+          text-align: left;
+      }
+
+      .menu-item.has-submenu > div {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          width: 100%;
+      }
+
+      .menu-item.has-submenu > div > div {
+          display: flex;
+          align-items: center;
       }
 
       /* Submenú */
       .submenu {
-          padding-left: 35px;
+          padding-left: 20px;
           max-height: 0;
           overflow: hidden;
           transition: max-height 0.3s ease;
@@ -317,15 +334,17 @@
           font-size: 12px;
           padding: 8px 16px;
           margin: 2px 12px;
+          display: flex;
+          align-items: center;
+      }
+
+      .submenu a i {
+          font-size: 16px;
+          width: 24px;
+          margin-right: 12px;
       }
 
       /* Icono de flecha para submenú */
-      .menu-item.has-submenu {
-          display: flex;
-          align-items: center;
-          justify-content: space-between;
-      }
-
       .menu-item.has-submenu .arrow {
           transition: transform 0.3s;
       }
@@ -370,19 +389,14 @@
           border-radius: 3px;
       }
 
-      .menu a i, .menu .menu-item i {
-          margin-right: 10px;
-          font-size: 16px;
-          width: 22px;
-          text-align: center;
-      }
-
       .menu hr {
-          margin: 6px 12px;
+          margin: 8px 12px;
           border-color: rgba(255,255,255,0.08);
       }
 
-      /* Sidebar colapsado */
+      /* ============================================ */
+      /* SIDEBAR COLAPSADO - CON PADDING IZQUIERDO EN ÍCONOS */
+      /* ============================================ */
       #sidebar-container.collapsed .menu span:not(.arrow) {
           display: none;
       }
@@ -391,22 +405,38 @@
           display: none;
       }
 
+      /* Estilos UNIFICADOS para TODOS los items en modo colapsado */
       #sidebar-container.collapsed .menu a,
       #sidebar-container.collapsed .menu .menu-item {
           text-align: center;
-          padding: 12px 0;
+          padding: 12px 0 !important;
+          margin: 3px 12px !important;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          min-height: 40px;
       }
 
-      #sidebar-container.collapsed .menu a i,
-      #sidebar-container.collapsed .menu .menu-item i {
-          margin-right: 0;
-          font-size: 20px;
+      /* Asegurar que el div interno del has-submenu también esté centrado */
+      #sidebar-container.collapsed .menu .has-submenu > div {
+          justify-content: center;
+          width: auto;
       }
 
-      #sidebar-container.collapsed .menu-item.has-submenu {
+      #sidebar-container.collapsed .menu .has-submenu > div > div {
           justify-content: center;
       }
 
+      /* ÍCONOS CON PADDING IZQUIERDO DE 10px EN MODO COLAPSADO */
+      #sidebar-container.collapsed .menu a i,
+      #sidebar-container.collapsed .menu .menu-item i {
+          margin-right: 0 !important;
+          font-size: 20px;
+          width: auto;
+          padding-left: 10px !important;  /* Padding izquierdo de 10px */
+      }
+
+      /* Ocultar flechas en modo colapsado */
       #sidebar-container.collapsed .menu-item.has-submenu .arrow {
           display: none;
       }
@@ -427,6 +457,12 @@
           white-space: nowrap;
           z-index: 200;
           font-weight: 600;
+      }
+
+      /* Remover cualquier padding/margin extra del div interno en modo colapsado */
+      #sidebar-container.collapsed .menu .has-submenu div {
+          margin: 0;
+          padding: 0;
       }
 
       /* Buttons */
@@ -456,6 +492,27 @@
               display: none;
           }
       }
+
+      /* Tabla compacta */
+        .table-compact th {
+            padding: 10px 12px !important;
+            font-size: 12px !important;
+        }
+
+        .table-compact td {
+            padding: 10px 12px !important;
+            font-size: 13px !important;
+        }
+
+        .table-hover tbody tr:hover {
+            background: #f8fafc !important;
+        }
+
+        .table-striped tbody tr:nth-child(even) {
+            background-color: #f9fafb;
+        }
+
+        
   </style>
   
   <!--[if lt IE 9]>

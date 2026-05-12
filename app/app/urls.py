@@ -14,6 +14,10 @@ urlpatterns = [
     path('admin/', admin.site.urls),
     path('', include('authentication.urls')),
     path('home/', include('authentication.urls')),
+    
+    # Rutas para la administración de catalogos
+    path('administracion/', include('administracion.urls')),
+    
     path('usuarios/', views.user_list, name='user_list'),
     path('',
          LoginView.as_view
