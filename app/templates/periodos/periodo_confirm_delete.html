@@ -1,7 +1,15 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block content %}
 
+{% block page_title_icon %}
+    <i class="fas fa-trash-alt"></i>
+{% endblock %}
+
+{% block page_title %}
+    Eliminar Período
+{% endblock %}
+
+{% block content %}
 <style>
     .delete-container {
         max-width: 500px;
@@ -75,60 +83,29 @@
     }
 </style>
 
-<div class="app-wrapper">
-    <div id="sidebar-container">
-        {% include 'partials/navbar.html' %}
-    </div>
-
-    <div class="main-content-area">
-        <div class="top-navbar-fixed">
-            <div></div>
-            <div class="user-controls">
-                {% if user.is_authenticated %}
-                    <span class="user-name">
-                        <i class="icon ion-md-contact"></i>
-                        {{ user.username }}
-                    </span>
-                    <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                        </button>
-                    </form>
-                {% endif %}
-            </div>
+<div class="delete-container">
+    <div class="delete-card">
+        <div class="warning-icon">
+            <i class="fas fa-exclamation-triangle"></i>
         </div>
-
-        <div class="scrollable-content">
-            <div class="delete-container">
-                <div class="delete-card">
-                    <div class="warning-icon">
-                        <i class="fas fa-exclamation-triangle"></i>
-                    </div>
-                    <h3>¿Eliminar Período?</h3>
-                    <p>
-                        Estás a punto de eliminar el período 
-                        <span class="periodo-name">"{{ periodo.nombre }}"</span>
-                    </p>
-                    <p style="font-size: 12px;">Esta acción no se puede deshacer.</p>
-                    
-                    <form method="POST">
-                        {% csrf_token %}
-                        <div class="delete-actions">
-                            <button type="submit" class="btn-delete-confirm">
-                                <i class="fas fa-trash-alt"></i> Sí, Eliminar
-                            </button>
-                            <a href="{% url 'periodo_list' %}" class="btn-cancel">
-                                <i class="fas fa-times"></i> Cancelar
-                            </a>
-                        </div>
-                    </form>
-                </div>
-            </div>
-        </div>
+        <h3>¿Eliminar Período?</h3>
+        <p>
+            Estás a punto de eliminar el período 
+            <span class="periodo-name">"{{ periodo.nombre }}"</span>
+        </p>
+        <p style="font-size: 12px;">Esta acción no se puede deshacer.</p>
         
-        {% include 'partials/footer.html' %}
+        <form method="POST">
+            {% csrf_token %}
+            <div class="delete-actions">
+                <button type="submit" class="btn-delete-confirm">
+                    <i class="fas fa-trash-alt"></i> Sí, Eliminar
+                </button>
+                <a href="{% url 'periodo_list' %}" class="btn-cancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
+        </form>
     </div>
 </div>
-
 {% endblock %}

@@ -1,0 +1,320 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    <i class="fas fa-sitemap"></i>
+{% endblock %}
+
+{% block page_title %}
+    Listado de Nomenclatura Contable
+{% endblock %}
+
+{% block content %}
+<style>
+    /* Stats Cards */
+    .stats-row {
+        display: grid;
+        grid-template-columns: repeat(3, 1fr);
+        gap: 20px;
+        margin-bottom: 25px;
+    }
+    
+    .stat-card {
+        background: white;
+        border-radius: 16px;
+        padding: 20px;
+        text-align: center;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.05);
+    }
+    
+    .stat-card .stat-number {
+        font-size: 32px;
+        font-weight: 800;
+        color: var(--navy-dark);
+    }
+    
+    .stat-card .stat-label {
+        color: #64748b;
+        font-size: 13px;
+        margin-top: 5px;
+    }
+    
+    .stat-card .stat-icon {
+        font-size: 24px;
+        color: var(--gold-primary);
+        margin-bottom: 10px;
+    }
+    
+    /* Table Container */
+    .table-container {
+        background: white;
+        border-radius: 20px;
+        padding: 20px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        overflow-x: auto;
+    }
+    
+    .nomenclatura-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-family: 'Roboto', sans-serif;
+    }
+    
+    .nomenclatura-table th {
+        text-align: left;
+        padding: 15px 12px;
+        color: var(--navy-dark);
+        font-weight: 700;
+        font-size: 13px;
+        text-transform: uppercase;
+        border-bottom: 2px solid var(--gold-primary);
+        background-color: #f8fafc;
+    }
+    
+    .nomenclatura-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #eef2f6;
+        vertical-align: middle;
+    }
+    
+    /* Estilos por nivel */
+    .nivel-grupo {
+        background-color: #f0fdf4;
+        font-weight: 700;
+    }
+    
+    .nivel-grupo td:first-child {
+        border-left: 4px solid #16a34a;
+    }
+    
+    .nivel-subgrupo {
+        background-color: #fefce8;
+    }
+    
+    .nivel-subgrupo td:first-child {
+        border-left: 4px solid #eab308;
+    }
+    
+    .nivel-cuenta {
+        background-color: #ffffff;
+    }
+    
+    .nivel-cuenta td:first-child {
+        border-left: 4px solid #94a3b8;
+    }
+    
+    /* Iconos */
+    .icon-folder {
+        color: #16a34a;
+        font-size: 18px;
+        width: 24px;
+        text-align: center;
+    }
+    
+    .icon-folder-open {
+        color: #eab308;
+        font-size: 18px;
+        width: 24px;
+        text-align: center;
+    }
+    
+    .icon-file {
+        color: #64748b;
+        font-size: 18px;
+        width: 24px;
+        text-align: center;
+    }
+    
+    /* Indentación */
+    .indent-level-0 {
+        padding-left: 0px !important;
+    }
+    
+    .indent-level-1 {
+        padding-left: 30px !important;
+    }
+    
+    .indent-level-2 {
+        padding-left: 60px !important;
+    }
+    
+    /* Código/Nomenclatura */
+    .codigo-grupo {
+        font-weight: 700;
+        color: var(--navy-dark);
+        font-family: monospace;
+        font-size: 13px;
+    }
+    
+    .codigo-subgrupo {
+        color: #92400e;
+        font-family: monospace;
+        font-size: 12px;
+    }
+    
+    .codigo-cuenta {
+        color: #475569;
+        font-family: monospace;
+        font-size: 12px;
+    }
+    
+    /* Nombre del elemento */
+    .nombre-grupo {
+        font-weight: 700;
+        color: #166534;
+    }
+    
+    .nombre-subgrupo {
+        color: #854d0e;
+    }
+    
+    .nombre-cuenta {
+        color: #1e293b;
+    }
+    
+    /* Líneas de conexión (opcional) */
+    .tree-line {
+        color: #cbd5e1;
+        font-family: monospace;
+        font-size: 14px;
+        width: 30px;
+        text-align: center;
+    }
+    
+    /* Alternativa usando bordes */
+    .nomenclatura-table tbody tr {
+        transition: background 0.2s;
+    }
+    
+    .nomenclatura-table tbody tr:hover {
+        background: #f1f5f9 !important;
+    }
+</style>
+
+<!-- Stats Cards 
+<div class="stats-row">
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-folder"></i></div>
+        <div class="stat-number">{{ total_grupos }}</div>
+        <div class="stat-label">Grupos</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-folder-open"></i></div>
+        <div class="stat-number">{{ total_subgrupos }}</div>
+        <div class="stat-label">SubGrupos</div>
+    </div>
+    <div class="stat-card">
+        <div class="stat-icon"><i class="fas fa-file-alt"></i></div>
+        <div class="stat-number">{{ total_cuentas }}</div>
+        <div class="stat-label">Cuentas</div>
+    </div>
+</div>
+-->
+<!-- Nomenclatura Table -->
+<div class="table-container">
+    <table class="nomenclatura-table">
+        <thead>
+            <tr>
+                <th style="width: 8%">Nivel</th>
+                <th style="width: 12%">Código</th>
+                <th>Nombre</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for item in nomenclatura %}
+            <tr class="nivel-{{ item.tipo }}">
+                <!-- Columna de ícono/nivel -->
+                <td class="indent-level-{{ item.nivel }}">
+                    <i class="fas {{ item.icono }} 
+                        {% if item.tipo == 'grupo' %}icon-folder
+                        {% elif item.tipo == 'subgrupo' %}icon-folder-open
+                        {% else %}icon-file{% endif %}">
+                    </i>
+                </td>
+                
+                <!-- Columna de código (ID) -->
+                <td class="indent-level-{{ item.nivel }}">
+                    <span class="
+                        {% if item.tipo == 'grupo' %}codigo-grupo
+                        {% elif item.tipo == 'subgrupo' %}codigo-subgrupo
+                        {% else %}codigo-cuenta{% endif %}">
+                        {% if item.tipo == 'grupo' %}
+                            GRP-{{ item.id }}
+                        {% elif item.tipo == 'subgrupo' %}
+                            SUB-{{ item.id }}
+                        {% else %}
+                            CT-{{ item.id }}
+                        {% endif %}
+                    </span>
+                </td>
+                
+                <!-- Columna de nombre -->
+                <td class="indent-level-{{ item.nivel }}">
+                    <span class="
+                        {% if item.tipo == 'grupo' %}nombre-grupo
+                        {% elif item.tipo == 'subgrupo' %}nombre-subgrupo
+                        {% else %}nombre-cuenta{% endif %}">
+                        {% if item.nivel == 1 %}
+                            │&nbsp;&nbsp;└─&nbsp;
+                        {% endif %}
+                        {% if item.nivel == 2 %}
+                            │&nbsp;&nbsp;&nbsp;&nbsp;└─&nbsp;
+                        {% endif %}
+                        {{ item.nombre }}
+                    </span>
+                </td>
+            </tr>
+            {% empty %}
+            <tr>
+                <td colspan="3" style="text-align: center; padding: 60px;">
+                    <i class="fas fa-sitemap" style="font-size: 48px; color: #cbd5e1; margin-bottom: 15px; display: block;"></i>
+                    <h4 style="color: var(--navy-dark); margin-bottom: 10px;">No hay datos de nomenclatura</h4>
+                    <p style="color: #64748b;">Comienza creando grupos, subgrupos y cuentas en la sección de Nomenclatura.</p>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<style>
+    /* Estilos adicionales para la indentación visual */
+    .indent-level-0 {
+        padding-left: 12px !important;
+    }
+    
+    .indent-level-1 {
+        padding-left: 30px !important;
+    }
+    
+    .indent-level-2 {
+        padding-left: 55px !important;
+    }
+    
+    /* Colores de fondo por nivel */
+    .nivel-grupo {
+        background-color: #ecfdf5;
+    }
+    
+    .nivel-subgrupo {
+        background-color: #fefce8;
+    }
+    
+    .nivel-cuenta {
+        background-color: #ffffff;
+    }
+    
+    /* Borde izquierdo por nivel */
+    .nivel-grupo td:first-child {
+        border-left: 4px solid #10b981;
+    }
+    
+    .nivel-subgrupo td:first-child {
+        border-left: 4px solid #eab308;
+    }
+    
+    .nivel-cuenta td:first-child {
+        border-left: 4px solid #94a3b8;
+    }
+</style>
+{% endblock %}

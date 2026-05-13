@@ -1,0 +1,243 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    <i class="fas fa-plus-circle"></i>
+{% endblock %}
+
+{% block page_title %}
+    Asignar Período a {{ empresa.razon_social }}
+{% endblock %}
+
+{% block content %}
+<style>
+    .form-container {
+        max-width: 600px;
+        margin: 0 auto;
+    }
+    
+    .form-card {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--navy-dark);
+        font-size: 13px;
+    }
+    
+    .form-control-custom {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        transition: all 0.3s;
+        font-size: 14px;
+    }
+    
+    .form-control-custom:focus {
+        border-color: var(--gold-primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(197,160,40,0.1);
+    }
+    
+    .form-control-disabled {
+        background-color: #f1f5f9;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+    
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 10px;
+    }
+    
+    .form-check-input {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .form-check-label {
+        margin-bottom: 0;
+        cursor: pointer;
+        font-weight: normal;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+    }
+    
+    .btn-cancel {
+        background: #e2e8f0;
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel:hover {
+        background: #cbd5e1;
+    }
+    
+    .error-message {
+        color: #dc2626;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+    
+    .help-text {
+        color: #64748b;
+        font-size: 11px;
+        margin-top: 5px;
+    }
+    
+    .btn-back {
+        background: #64748b;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+    }
+    
+    .btn-back:hover {
+        background: #475569;
+        transform: translateY(-2px);
+        color: white;
+    }
+    
+    .info-box {
+        background: #f8fafc;
+        border-left: 4px solid var(--gold-primary);
+        padding: 15px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    .info-box p {
+        margin: 0;
+        font-size: 12px;
+        color: #64748b;
+    }
+    
+    .info-box i {
+        color: var(--gold-primary);
+        margin-right: 8px;
+    }
+</style>
+
+<div class="form-container">
+    <a href="{% url 'empresa_periodo_list' empresa.id %}" class="btn-back">
+        <i class="fas fa-arrow-left"></i> Volver a Períodos
+    </a>
+    
+    <div class="form-card">
+        <div class="info-box">
+            <p><i class="fas fa-info-circle"></i> Si es el primer período asignado a esta empresa, se activará automáticamente como predeterminado.</p>
+        </div>
+        
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label>Empresa</label>
+                <input type="text" class="form-control-custom form-control-disabled" value="{{ empresa.razon_social }} ({{ empresa.nit }})" disabled>
+                <input type="hidden" name="id_empresa" value="{{ empresa.id }}">
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.id_periodo.id_for_label }}">
+                    Período <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.id_periodo }}
+                {% if form.id_periodo.errors %}
+                    {% for error in form.id_periodo.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Seleccione el período contable a asignar</div>
+            </div>
+            
+            <div class="form-check">
+                {{ form.estatus }}
+                <label class="form-check-label" for="{{ form.estatus.id_for_label }}">
+                    Establecer como período predeterminado
+                </label>
+            </div>
+            <div class="help-text" style="margin-top: 0;">Si marca esta opción, los demás períodos se desactivarán automáticamente</div>
+            
+            {% if form.estatus.errors %}
+                {% for error in form.estatus.errors %}
+                    <div class="error-message">{{ error }}</div>
+                {% endfor %}
+            {% endif %}
+            
+            {% if form.non_field_errors %}
+                <div class="error-message" style="margin-bottom: 20px;">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    <i class="fas fa-save"></i> {{ action }}
+                </button>
+                <a href="{% url 'empresa_periodo_list' empresa.id %}" class="btn-cancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('input, select, textarea').forEach(field => {
+        if (!field.classList.contains('form-check-input') && !field.hasAttribute('disabled')) {
+            field.classList.add('form-control-custom');
+        }
+    });
+</script>
+{% endblock %}

@@ -1,7 +1,15 @@
 {% extends 'base.html' %}
 {% load static%}
-{% block content %}
 
+{% block page_title_icon %}
+    <i class="fas fa-chart-line"></i>
+{% endblock %}
+
+{% block page_title %}
+    Panel de Control
+{% endblock %}
+
+{% block content %}
 <style>
     /* Dashboard specific styles */
     .dashboard-card {
@@ -96,219 +104,36 @@
         margin-top: 10px;
     }
 
-    .table-container {
-        background: white;
-        border-radius: 20px;
-        padding: 20px;
-        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-        margin-bottom: 20px;
-    }
-
-    .table-container h4 {
-        color: #0A1628;
-        font-weight: 700;
-        margin-bottom: 20px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid #C5A028;
-        display: inline-block;
-    }
-
-    .custom-table {
-        width: 100%;
-    }
-
-    .custom-table th {
-        color: #0A1628;
-        font-weight: 600;
-        font-size: 13px;
-        text-transform: uppercase;
-        padding: 12px 0;
-        border-bottom: 1px solid #e2e8f0;
-    }
-
-    .custom-table td {
-        padding: 12px 0;
-        border-bottom: 1px solid #f1f5f9;
-        color: #334155;
-        font-size: 14px;
-    }
-
-    /* Contenedor para el contenido con padding inferior para el footer */
     .content-wrapper {
         padding-bottom: 100px;
     }
-
-    /* Asegurar que las cards tengan altura consistente */
-    .row {
-        margin-bottom: 20px;
-    }
-
-    
 </style>
 
-<div class="app-wrapper">
-    <!-- SIDEBAR -->
-    <div id="sidebar-container">
-        {% include 'partials/navbar.html' %}
-    </div>
-
-    <!-- MAIN CONTENT AREA -->
-    <div class="main-content-area">
-        <!-- TOP BAR FIJO -->
-        <div class="top-navbar-fixed">
-            
-            <div class="user-controls">
-                {% if user.is_authenticated %}
-                    <span class="user-name">
-                        <i class="icon ion-md-contact"></i>
-                        {{ user.username }}
-                    </span>
-                    <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                        </button>
-                    </form>
-                {% else %}
-                    <a href="/login/" class="logout-btn" style="text-decoration: none;">
-                        <i class="fas fa-sign-in-alt"></i> Iniciar Sesión
-                    </a>
-                {% endif %}
-            </div>
-        </div>
-
-        <!-- CONTENIDO SCROLLABLE -->
-        <div class="scrollable-content">
-            <div class="content-wrapper">
-                {% include 'partials/modal.html' %}
-                {% include 'partials/alerts.html' %}
-                
-                <!-- Welcome Banner -->
-                <div class="welcome-banner">
-                    <div class="row align-items-center">
-                        <div class="col-md-8">
-                            <h2>
-                                <i class="fas fa-hand-wave"></i>
-                                ¡Bienvenido, {{ user.username|default:"Contador" }}!
-                            </h2>
-                            <p>Panel de control del sistema de gestión contable Aleman Guerra Contadores</p>
-                            <div class="date">
-                                <i class="fas fa-calendar-alt"></i> 
-                                <script>
-                                    const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-                                    document.write(new Date().toLocaleDateString('es-ES', options));
-                                </script>
-                            </div>
-                        </div>
-                        <div class="col-md-4 text-center">
-                            <i class="fas fa-calculator" style="font-size: 80px; color: rgba(255,255,255,0.2);"></i>
-                        </div>
-                    </div>
+<div class="content-wrapper">
+    {% include 'partials/modal.html' %}
+    {% include 'partials/alerts.html' %}
+    
+    <!-- Welcome Banner -->
+    <div class="welcome-banner">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h2>
+                    <i class="fas fa-hand-wave"></i>
+                    ¡Bienvenido, {{ user.username|default:"Contador" }}!
+                </h2>
+                <p>Panel de control del sistema de gestión contable Aleman Guerra Contadores</p>
+                <div class="date">
+                    <i class="fas fa-calendar-alt"></i> 
+                    <script>
+                        const options = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
+                        document.write(new Date().toLocaleDateString('es-ES', options));
+                    </script>
                 </div>
-                
-                <!-- Stats Cards -->
-                <!--
-                <div class="row">
-                    <div class="col-md-3">
-                        <div class="dashboard-card">
-                            <div class="icon-circle">
-                                <i class="fas fa-file-invoice-dollar"></i>
-                            </div>
-                            <h3>156</h3>
-                            <p>Facturas Procesadas</p>
-                            <span class="badge-gold"><i class="fas fa-chart-line"></i> +12% este mes</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="dashboard-card">
-                            <div class="icon-circle">
-                                <i class="fas fa-boxes"></i>
-                            </div>
-                            <h3>2,340</h3>
-                            <p>Productos en Inventario</p>
-                            <span class="badge-gold"><i class="fas fa-check-circle"></i> Stock actual</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="dashboard-card">
-                            <div class="icon-circle">
-                                <i class="fas fa-truck"></i>
-                            </div>
-                            <h3>89</h3>
-                            <p>Envíos Pendientes</p>
-                            <span class="badge-gold"><i class="fas fa-clock"></i> Por procesar</span>
-                        </div>
-                    </div>
-                    <div class="col-md-3">
-                        <div class="dashboard-card">
-                            <div class="icon-circle">
-                                <i class="fas fa-users"></i>
-                            </div>
-                            <h3>24</h3>
-                            <p>Usuarios Activos</p>
-                            <span class="badge-gold"><i class="fas fa-user-check"></i> Conectados ahora</span>
-                        </div>
-                    </div>
-                </div>-->
-                
-                <!-- Recent Activity Table -->
-                <!--
-                <div class="row">
-                    <div class="col-md-12">
-                        <div class="table-container">
-                            <h4>
-                                <i class="fas fa-history" style="margin-right: 10px;"></i>
-                                Actividad Reciente
-                            </h4>
-                            <table class="custom-table">
-                                <thead>
-                                    <tr>
-                                        <th>Usuario</th>
-                                        <th>Acción</th>
-                                        <th>Módulo</th>
-                                        <th>Fecha</th>
-                                        <th>Estado</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    <tr>
-                                        <td>{{ user.username|default:"contador" }}</td>
-                                        <td>Inicio de sesión</td>
-                                        <td>Sistema</td>
-                                        <td>Hoy</td>
-                                        <td><span class="badge-gold">Exitoso</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>usuario1</td>
-                                        <td>Actualización de inventario</td>
-                                        <td>Inventario</td>
-                                        <td>Ayer</td>
-                                        <td><span class="badge-gold">Completado</span></td>
-                                    </tr>
-                                    <tr>
-                                        <td>usuario2</td>
-                                        <td>Generación de reporte</td>
-                                        <td>Reportes</td>
-                                        <td>12 Mayo 2026</td>
-                                        <td><span class="badge-gold">Exitoso</span></td>
-                                    </tr>
-                                </tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div> -->
+            </div>
+            <div class="col-md-4 text-center">
+                <i class="fas fa-calculator" style="font-size: 80px; color: rgba(255,255,255,0.2);"></i>
             </div>
         </div>
-        
-        <!-- FOOTER FIJO -->
-        {% include 'partials/footer.html' %}
     </div>
 </div>
-
-<script type="text/javascript" src="https://malsup.github.io/jquery.blockUI.js"></script>
-<script type="text/javascript" src="https://cdnjs.cloudflare.com/ajax/libs/mdb-ui-kit/3.5.0/mdb.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/popper.js@1.16.0/dist/umd/popper.min.js"></script>          
-<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.4.1/js/bootstrap.min.js"></script>
-<script src="{% static '/scripts/main140721.js' %}"></script>
-
 {% endblock %}

@@ -1,7 +1,23 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block content %}
 
+{% block page_title_icon %}
+    {% if periodo %}
+        <i class="fas fa-edit"></i>
+    {% else %}
+        <i class="fas fa-plus-circle"></i>
+    {% endif %}
+{% endblock %}
+
+{% block page_title %}
+    {% if periodo %}
+        Editar Período: {{ periodo.nombre }}
+    {% else %}
+        Nuevo Período
+    {% endif %}
+{% endblock %}
+
+{% block content %}
 <style>
     .form-container {
         max-width: 600px;
@@ -13,15 +29,6 @@
         border-radius: 20px;
         padding: 30px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
-    }
-    
-    .form-card h3 {
-        color: var(--navy-dark);
-        font-weight: 700;
-        margin-bottom: 25px;
-        padding-bottom: 15px;
-        border-bottom: 2px solid var(--gold-primary);
-        display: inline-block;
     }
     
     .form-group {
@@ -102,111 +109,84 @@
     }
 </style>
 
-<div class="app-wrapper">
-    <div id="sidebar-container">
-        {% include 'partials/navbar.html' %}
-    </div>
-
-    <div class="main-content-area">
-        <div class="top-navbar-fixed">
-            <div></div>
-            <div class="user-controls">
-                {% if user.is_authenticated %}
-                    <span class="user-name">
-                        <i class="icon ion-md-contact"></i>
-                        {{ user.username }}
-                    </span>
-                    <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                        </button>
-                    </form>
+<div class="form-container">
+    <div class="form-card">
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label for="{{ form.nombre.id_for_label }}">
+                    Nombre del Período <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.nombre }}
+                {% if form.nombre.errors %}
+                    {% for error in form.nombre.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Ej: Periodo 2024-01, Enero 2024, etc.</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.fecha_inicial.id_for_label }}">
+                    Fecha Inicial <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.fecha_inicial }}
+                {% if form.fecha_inicial.errors %}
+                    {% for error in form.fecha_inicial.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
                 {% endif %}
             </div>
-        </div>
-
-        <div class="scrollable-content">
-            <div class="form-container">
-                <div class="form-card">
-                    <h3>
-                        <i class="fas fa-calendar-alt" style="color: var(--gold-primary);"></i>
-                        {{ title }}
-                    </h3>
-                    
-                    <form method="POST">
-                        {% csrf_token %}
-                        
-                        <div class="form-group">
-                            <label for="{{ form.nombre.id_for_label }}">
-                                Nombre del Período <span style="color: #dc2626;">*</span>
-                            </label>
-                            {{ form.nombre }}
-                            {% if form.nombre.errors %}
-                                {% for error in form.nombre.errors %}
-                                    <div class="error-message">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
-                            <div class="help-text">Ej: Periodo 2024-01, Enero 2024, etc.</div>
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="{{ form.fecha_inicial.id_for_label }}">
-                                Fecha Inicial <span style="color: #dc2626;">*</span>
-                            </label>
-                            {{ form.fecha_inicial }}
-                            {% if form.fecha_inicial.errors %}
-                                {% for error in form.fecha_inicial.errors %}
-                                    <div class="error-message">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="{{ form.fecha_final.id_for_label }}">
-                                Fecha Final <span style="color: #dc2626;">*</span>
-                            </label>
-                            {{ form.fecha_final }}
-                            {% if form.fecha_final.errors %}
-                                {% for error in form.fecha_final.errors %}
-                                    <div class="error-message">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        </div>
-                        
-                        <div class="form-group">
-                            <label for="{{ form.estado.id_for_label }}">Estado</label>
-                            {{ form.estado }}
-                            {% if form.estado.errors %}
-                                {% for error in form.estado.errors %}
-                                    <div class="error-message">{{ error }}</div>
-                                {% endfor %}
-                            {% endif %}
-                        </div>
-                        
-                        {% if form.non_field_errors %}
-                            <div class="error-message" style="margin-bottom: 20px;">
-                                {% for error in form.non_field_errors %}
-                                    {{ error }}
-                                {% endfor %}
-                            </div>
-                        {% endif %}
-                        
-                        <div class="form-actions">
-                            <button type="submit" class="btn-submit">
-                                <i class="fas fa-save"></i> {{ action }}
-                            </button>
-                            <a href="{% url 'periodo_list' %}" class="btn-cancel">
-                                <i class="fas fa-times"></i> Cancelar
-                            </a>
-                        </div>
-                    </form>
-                </div>
+            
+            <div class="form-group">
+                <label for="{{ form.fecha_final.id_for_label }}">
+                    Fecha Final <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.fecha_final }}
+                {% if form.fecha_final.errors %}
+                    {% for error in form.fecha_final.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
             </div>
-        </div>
-        
-        {% include 'partials/footer.html' %}
+            
+            <div class="form-group">
+                <label for="{{ form.estado.id_for_label }}">Estado</label>
+                {{ form.estado }}
+                {% if form.estado.errors %}
+                    {% for error in form.estado.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            {% if form.non_field_errors %}
+                <div class="error-message" style="margin-bottom: 20px;">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    <i class="fas fa-save"></i> {{ action }}
+                </button>
+                <a href="{% url 'periodo_list' %}" class="btn-cancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
+        </form>
     </div>
 </div>
 
+<script>
+    // Aplicar clases CSS a todos los campos del formulario
+    document.querySelectorAll('input, select, textarea').forEach(field => {
+        if (!field.classList.contains('form-check-input')) {
+            field.classList.add('form-control-custom');
+        }
+    });
+</script>
 {% endblock %}

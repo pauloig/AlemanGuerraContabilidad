@@ -1,0 +1,239 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    {% if sucursal %}
+        <i class="fas fa-edit"></i>
+    {% else %}
+        <i class="fas fa-plus-circle"></i>
+    {% endif %}
+{% endblock %}
+
+{% block page_title %}
+    {% if sucursal %}
+        Editar Sucursal: {{ sucursal.nombre_comercial }}
+    {% else %}
+        Nueva Sucursal para {{ empresa.razon_social }}
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+    .form-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+    
+    .form-card {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--navy-dark);
+        font-size: 13px;
+    }
+    
+    .form-control-custom {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        transition: all 0.3s;
+        font-size: 14px;
+    }
+    
+    .form-control-custom:focus {
+        border-color: var(--gold-primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(197,160,40,0.1);
+    }
+    
+    .form-control-disabled {
+        background-color: #f1f5f9;
+        cursor: not-allowed;
+        opacity: 0.7;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+    }
+    
+    .btn-cancel {
+        background: #e2e8f0;
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel:hover {
+        background: #cbd5e1;
+    }
+    
+    .error-message {
+        color: #dc2626;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+    
+    .help-text {
+        color: #64748b;
+        font-size: 11px;
+        margin-top: 5px;
+    }
+    
+    .btn-back {
+        background: #64748b;
+        color: white;
+        border: none;
+        padding: 6px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        transition: all 0.3s;
+        margin-bottom: 20px;
+    }
+    
+    .btn-back:hover {
+        background: #475569;
+        transform: translateY(-2px);
+        color: white;
+    }
+</style>
+
+<div class="form-container">
+    <a href="{% url 'sucursal_list' empresa.id %}" class="btn-back">
+        <i class="fas fa-arrow-left"></i> Volver a Sucursales
+    </a>
+    
+    <div class="form-card">
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="form-group">
+                <label for="{{ form.id_empresa.id_for_label }}">
+                    Empresa <span style="color: #dc2626;">*</span>
+                </label>
+                <select name="id_empresa" id="id_empresa" class="form-control-custom form-control-disabled" disabled>
+                    <option value="{{ empresa.id }}" selected>{{ empresa.razon_social }} ({{ empresa.nit }})</option>
+                </select>
+                <input type="hidden" name="id_empresa" value="{{ empresa.id }}">
+                <div class="help-text">La empresa no se puede modificar</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.nombre_comercial.id_for_label }}">
+                    Nombre Comercial <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.nombre_comercial }}
+                {% if form.nombre_comercial.errors %}
+                    {% for error in form.nombre_comercial.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Ej: Sucursal Centro, Sucursal Norte, etc.</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.nit.id_for_label }}">
+                    NIT <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.nit }}
+                {% if form.nit.errors %}
+                    {% for error in form.nit.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Número de identificación tributaria de la sucursal</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.establecimiento.id_for_label }}">
+                    Establecimiento <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.establecimiento }}
+                {% if form.establecimiento.errors %}
+                    {% for error in form.establecimiento.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Ej: 001, SUC-001, etc.</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.direccion.id_for_label }}">
+                    Dirección <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.direccion }}
+                {% if form.direccion.errors %}
+                    {% for error in form.direccion.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Dirección física completa de la sucursal</div>
+            </div>
+            
+            {% if form.non_field_errors %}
+                <div class="error-message" style="margin-bottom: 20px;">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    <i class="fas fa-save"></i> {{ action }}
+                </button>
+                <a href="{% url 'sucursal_list' empresa.id %}" class="btn-cancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('input, select, textarea').forEach(field => {
+        if (!field.classList.contains('form-check-input') && !field.hasAttribute('disabled')) {
+            field.classList.add('form-control-custom');
+        }
+    });
+</script>
+{% endblock %}

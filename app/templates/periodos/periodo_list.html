@@ -1,31 +1,16 @@
 {% extends 'base.html' %}
 {% load static %}
-{% block content %}
 
+{% block page_title_icon %}
+    <i class="fas fa-calendar-alt"></i>
+{% endblock %}
+
+{% block page_title %}
+    Gestión de Períodos
+{% endblock %}
+
+{% block content %}
 <style>
-    /* Page Header */
-    .page-header {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        margin-bottom: 25px;
-        flex-wrap: wrap;
-        gap: 15px;
-    }
-    
-    .page-header h2 {
-        color: var(--navy-dark);
-        font-weight: 700;
-        margin: 0;
-        display: flex;
-        align-items: center;
-        gap: 10px;
-    }
-    
-    .page-header h2 i {
-        color: var(--gold-primary);
-    }
-    
     /* Stats Cards */
     .stats-row {
         display: grid;
@@ -60,14 +45,21 @@
         margin-bottom: 10px;
     }
     
-    /* Search and Filters */
-    .filters-bar {
+    /* Search and Filters - Layout con botón Nuevo */
+    .top-actions-bar {
         display: flex;
         justify-content: space-between;
         align-items: center;
         margin-bottom: 20px;
         flex-wrap: wrap;
         gap: 15px;
+    }
+    
+    .filters-group {
+        display: flex;
+        align-items: center;
+        gap: 15px;
+        flex-wrap: wrap;
     }
     
     .search-bar {
@@ -83,10 +75,10 @@
     
     .search-bar input {
         border: none;
-        padding: 10px 0;
-        width: 250px;
+        padding: 8px 0;
+        width: 220px;
         outline: none;
-        font-size: 14px;
+        font-size: 13px;
     }
     
     .search-bar button {
@@ -98,14 +90,14 @@
     
     .filter-buttons {
         display: flex;
-        gap: 10px;
+        gap: 8px;
     }
     
     .filter-btn {
-        padding: 8px 16px;
+        padding: 6px 14px;
         border-radius: 10px;
         text-decoration: none;
-        font-size: 13px;
+        font-size: 12px;
         font-weight: 500;
         transition: all 0.2s;
         background: white;
@@ -123,6 +115,28 @@
         transform: translateY(-2px);
     }
     
+    /* Botón Nuevo Período - mismo estilo que los filtros pero más destacado */
+    .btn-add {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 6px 16px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        transition: all 0.3s;
+    }
+    
+    .btn-add:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+        color: var(--navy-dark);
+    }
+    
     /* Periodos Table */
     .table-container {
         background: white;
@@ -138,24 +152,28 @@
     
     .custom-table th {
         text-align: left;
-        padding: 10px 12px;  /* Antes: 15px 12px */
+        padding: 10px 12px;
         color: var(--navy-dark);
         font-weight: 600;
-        font-size: 12px;  /* Antes: 13px */
+        font-size: 12px;
         text-transform: uppercase;
         border-bottom: 2px solid #e2e8f0;
     }
     
     .custom-table td {
-        padding: 5px 7px;  /* Antes: 15px 12px */
+        padding: 8px 12px;
         border-bottom: 1px solid #f1f5f9;
         color: #334155;
-        font-size: 13px;  /* Antes: 14px */
+        font-size: 13px;
         vertical-align: middle;
     }
     
-    .custom-table tr:hover {
+    .custom-table tbody tr:hover {
         background: #f8fafc;
+    }
+    
+    .custom-table tbody tr:nth-child(even) {
+        background-color: #f9fafb;
     }
     
     /* Status Badges */
@@ -217,26 +235,6 @@
         transform: scale(1.05);
     }
     
-    .btn-add {
-        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
-        color: var(--navy-dark);
-        border: none;
-        padding: 10px 20px;
-        border-radius: 12px;
-        font-weight: 600;
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        text-decoration: none;
-        transition: all 0.3s;
-    }
-    
-    .btn-add:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
-        color: var(--navy-dark);
-    }
-    
     /* Pagination */
     .pagination {
         display: flex;
@@ -286,160 +284,109 @@
     }
 </style>
 
-<div class="app-wrapper">
-    <div id="sidebar-container">
-        {% include 'partials/navbar.html' %}
-    </div>
-
-    <div class="main-content-area">
-        <div class="top-navbar-fixed">
-            <div></div>
-            <div class="user-controls">
-                {% if user.is_authenticated %}
-                    <span class="user-name">
-                        <i class="icon ion-md-contact"></i>
-                        {{ user.username }}
-                    </span>
-                    <form id="logoutForm" action="/logout/" method="post" style="display: inline;">
-                        {% csrf_token %}
-                        <button type="submit" class="logout-btn">
-                            <i class="fas fa-sign-out-alt"></i> Cerrar Sesión
-                        </button>
-                    </form>
-                {% endif %}
-            </div>
-        </div>
-
-        <div class="scrollable-content">
-            <!-- Page Header -->
-            <div class="page-header">
-                <h2>
-                    <i class="fas fa-calendar-alt"></i>
-                    Gestión de Períodos
-                </h2>
-                <a href="{% url 'periodo_create' %}" class="btn-add">
-                    <i class="fas fa-plus-circle"></i> Nuevo Período
-                </a>
-            </div>
-            
-            <!-- Stats Cards
-            <div class="stats-row">
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-calendar-alt"></i></div>
-                    <div class="stat-number">{{ total_periodos }}</div>
-                    <div class="stat-label">Total Períodos</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
-                    <div class="stat-number">{{ activos }}</div>
-                    <div class="stat-label">Períodos Activos</div>
-                </div>
-                <div class="stat-card">
-                    <div class="stat-icon"><i class="fas fa-lock"></i></div>
-                    <div class="stat-number">{{ cerrados }}</div>
-                    <div class="stat-label">Períodos Cerrados</div>
-                </div>
-            </div> -->
-            
-            <!-- Filters -->
-            <div class="filters-bar">
-                <form method="GET" class="search-bar">
-                    <i class="fas fa-search" style="color: #94a3b8;"></i>
-                    <input type="text" name="search" placeholder="Buscar período..." value="{{ search_query }}">
-                    <button type="submit"><i class="fas fa-arrow-right"></i></button>
-                </form>
-                <div class="filter-buttons">
-                    <a href="{% url 'periodo_list' %}" class="filter-btn {% if not estado_filter %}active{% endif %}">Todos</a>
-                    <a href="?estado=A{% if search_query %}&search={{ search_query }}{% endif %}" class="filter-btn {% if estado_filter == 'A' %}active{% endif %}">Activos</a>
-                    <a href="?estado=C{% if search_query %}&search={{ search_query }}{% endif %}" class="filter-btn {% if estado_filter == 'C' %}active{% endif %}">Cerrados</a>
-                </div>
-            </div>
-            
-            <!-- Periodos Table -->
-            <div class="table-container">
-            {% if periodos %}
-                <table class="custom-table table-hover table-striped">
-                    <thead>
-                        <tr>
-                            <th>Nombre</th>
-                            <th>Fecha Inicial</th>
-                            <th>Fecha Final</th>
-                            <th>Estado</th>
-                            <th>Creado por</th>
-                            <th>Modificado por</th>
-                            <th>Fecha Creación</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {% for periodo in periodos %}
-                        <tr>
-                            <td><strong>{{ periodo.nombre }}</strong></td>
-                            <td>{{ periodo.fecha_inicial|date:"d/m/Y" }}</td>
-                            <td>{{ periodo.fecha_final|date:"d/m/Y" }}</td>
-                            <td>
-                                {% if periodo.estado == 'A' %}
-                                    <span class="status-active"><i class="fa fa-circle" style="font-size: 8px;"></i> Activo</span>
-                                {% else %}
-                                    <span class="status-closed"><i class="fa fa-circle" style="font-size: 8px;"></i> Cerrado</span>
-                                {% endif %}
-                            </td>
-                            <td>{{ periodo.creado_por.get_full_name|default:periodo.creado_por.username|default:"-" }}</td>
-                            <td>{{ periodo.modificado_por.get_full_name|default:periodo.modificado_por.username|default:"-" }}</td>
-                            <td>{{ periodo.fecha_creacion|date:"d/m/Y H:i" }}</td>
-                            <td>
-                                <div class="action-buttons">
-                                    <a href="{% url 'periodo_edit' periodo.pk %}" class="btn-icon btn-edit" title="Editar">
-                                        <i class="fa fa-edit"></i>
-                                    </a>
-                                    <a href="{% url 'periodo_delete' periodo.pk %}" class="btn-icon btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar este período?')">
-                                        <i class="fa fa-trash-alt"></i>
-                                    </a>
-                                </div>
-                            </td>
-                        </tr>
-                        {% endfor %}
-                    </tbody>
-                </table>
-                
-                <!-- Pagination -->
-                {% if periodos.has_other_pages %}
-                <div class="pagination">
-                    {% if periodos.has_previous %}
-                        <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">&laquo;</a>
-                        <a href="?page={{ periodos.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">‹</a>
-                    {% endif %}
-                    
-                    {% for num in periodos.paginator.page_range %}
-                        {% if periodos.number == num %}
-                            <span class="active">{{ num }}</span>
-                        {% elif num > periodos.number|add:'-3' and num < periodos.number|add:'3' %}
-                            <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">{{ num }}</a>
-                        {% endif %}
-                    {% endfor %}
-                    
-                    {% if periodos.has_next %}
-                        <a href="?page={{ periodos.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">›</a>
-                        <a href="?page={{ periodos.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">&raquo;</a>
-                    {% endif %}
-                </div>
-                {% endif %}
-                
-                {% else %}
-                <div class="empty-state">
-                    <i class="fas fa-calendar-times"></i>
-                    <h4>No hay períodos registrados</h4>
-                    <p>Comienza creando tu primer período contable.</p>
-                    <a href="{% url 'periodo_create' %}" class="btn-add" style="display: inline-flex; margin-top: 20px;">
-                        <i class="fas fa-plus-circle"></i> Crear Período
-                    </a>
-                </div>
-                {% endif %}
-            </div>
-        </div>
+<!-- Top Actions Bar: Filtros + Botón Nuevo -->
+<div class="top-actions-bar">
+    <div class="filters-group">
+        <!-- Search Bar -->
+        <form method="GET" class="search-bar">
+            <i class="fas fa-search" style="color: #94a3b8;"></i>
+            <input type="text" name="search" placeholder="Buscar período..." value="{{ search_query }}">
+            <button type="submit"><i class="fas fa-arrow-right"></i></button>
+        </form>
         
-        {% include 'partials/footer.html' %}
+        <!-- Filter Buttons -->
+        <div class="filter-buttons">
+            <a href="{% url 'periodo_list' %}" class="filter-btn {% if not estado_filter %}active{% endif %}">Todos</a>
+            <a href="?estado=A{% if search_query %}&search={{ search_query }}{% endif %}" class="filter-btn {% if estado_filter == 'A' %}active{% endif %}">Activos</a>
+            <a href="?estado=C{% if search_query %}&search={{ search_query }}{% endif %}" class="filter-btn {% if estado_filter == 'C' %}active{% endif %}">Cerrados</a>
+        </div>
     </div>
+    
+    <!-- Botón Nuevo Período -->
+    <a href="{% url 'periodo_create' %}" class="btn-add">
+        <i class="fas fa-plus-circle"></i> Nuevo Período
+    </a>
 </div>
 
+<!-- Periodos Table -->
+<div class="table-container">
+    {% if periodos %}
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Fecha Inicial</th>
+                <th>Fecha Final</th>
+                <th>Estado</th>
+                <th>Creado por</th>
+                <th>Modificado por</th>
+                <th>Fecha Creación</th>
+                <th>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for periodo in periodos %}
+            <tr>
+                <td><strong>{{ periodo.nombre }}</strong></td>
+                <td>{{ periodo.fecha_inicial|date:"d/m/Y" }}</td>
+                <td>{{ periodo.fecha_final|date:"d/m/Y" }}</td>
+                <td>
+                    {% if periodo.estado == 'A' %}
+                        <span class="status-active"><i class="fa fa-circle" style="font-size: 8px;"></i> Activo</span>
+                    {% else %}
+                        <span class="status-closed"><i class="fa fa-circle" style="font-size: 8px;"></i> Cerrado</span>
+                    {% endif %}
+                </td>
+                <td>{{ periodo.creado_por.get_full_name|default:periodo.creado_por.username|default:"-" }}</td>
+                <td>{{ periodo.modificado_por.get_full_name|default:periodo.modificado_por.username|default:"-" }}</td>
+                <td>{{ periodo.fecha_creacion|date:"d/m/Y H:i" }}</td>
+                <td>
+                    <div class="action-buttons">
+                        <a href="{% url 'periodo_edit' periodo.pk %}" class="btn-icon btn-edit" title="Editar">
+                            <i class="fa fa-edit"></i>
+                        </a>
+                        <a href="{% url 'periodo_delete' periodo.pk %}" class="btn-icon btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar este período?')">
+                            <i class="fa fa-trash-alt"></i>
+                        </a>
+                    </div>
+                </td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+    
+    <!-- Pagination -->
+    {% if periodos.has_other_pages %}
+    <div class="pagination">
+        {% if periodos.has_previous %}
+            <a href="?page=1{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">&laquo;</a>
+            <a href="?page={{ periodos.previous_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">‹</a>
+        {% endif %}
+        
+        {% for num in periodos.paginator.page_range %}
+            {% if periodos.number == num %}
+                <span class="active">{{ num }}</span>
+            {% elif num > periodos.number|add:'-3' and num < periodos.number|add:'3' %}
+                <a href="?page={{ num }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">{{ num }}</a>
+            {% endif %}
+        {% endfor %}
+        
+        {% if periodos.has_next %}
+            <a href="?page={{ periodos.next_page_number }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">›</a>
+            <a href="?page={{ periodos.paginator.num_pages }}{% if search_query %}&search={{ search_query }}{% endif %}{% if estado_filter %}&estado={{ estado_filter }}{% endif %}">&raquo;</a>
+        {% endif %}
+    </div>
+    {% endif %}
+    
+    {% else %}
+    <div class="empty-state">
+        <i class="fas fa-calendar-times"></i>
+        <h4>No hay períodos registrados</h4>
+        <p>Comienza creando tu primer período contable.</p>
+        <a href="{% url 'periodo_create' %}" class="btn-add" style="display: inline-flex; margin-top: 20px;">
+            <i class="fas fa-plus-circle"></i> Crear Período
+        </a>
+    </div>
+    {% endif %}
+</div>
 {% endblock %}

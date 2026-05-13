@@ -1,7 +1,7 @@
 {%load static%}
 
 <div class="menu">
-    <!-- BOTÓN INICIO - Ahora con la MISMA estructura que los demás -->
+    <!-- BOTÓN INICIO -->
     <div class="menu-item" data-tooltip="Inicio" data-menu="inicio" onclick="setActiveMenu(this, event)">
         <div style="display: flex; align-items: center; width: 100%;">
             <div style="display: flex; align-items: center;">
@@ -13,29 +13,29 @@
     <!-- Separador después de Inicio -->
     <hr style="margin: 8px 12px;">
     
-    <!-- ADMINISTRACIÓN -->
-    <div class="menu-item has-submenu" data-tooltip="Administración" data-menu="administracion" onclick="toggleSubmenu(this, event)">
-        <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
-            <div style="display: flex; align-items: center;">
-                <i class="icon ion-md-settings"></i> <span>Administración</span>
+        <!-- ADMINISTRACIÓN -->
+        <div class="menu-item has-submenu" data-tooltip="Administración" data-menu="administracion" onclick="toggleSubmenu(this, event)">
+            <div style="display: flex; align-items: center; justify-content: space-between; width: 100%;">
+                <div style="display: flex; align-items: center;">
+                    <i class="icon ion-md-settings"></i> <span>Administración</span>
+                </div>
+                <i class="icon ion-md-arrow-forward arrow" style="font-size: 14px;"></i>
             </div>
-            <i class="icon ion-md-arrow-forward arrow" style="font-size: 14px;"></i>
         </div>
-    </div>
-    <div class="submenu" data-parent="administracion">
-        <a href="/administracion/periodos/" data-tooltip="Periodos" data-submenu="periodos" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
-            <i class="icon ion-md-calendar"></i> <span>Periodos</span>
-        </a>
-        <a href="/administracion/empresas/" data-tooltip="Empresas" data-submenu="empresas" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
-            <i class="icon ion-md-business"></i> <span>Empresas</span>
-        </a>
-        <a href="/administracion/nomenclatura/" data-tooltip="Nomenclatura" data-submenu="nomenclatura" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
-            <i class="icon ion-md-list"></i> <span>Nomenclatura</span>
-        </a>
-        <a href="/administracion/listado-nomenclatura/" data-tooltip="Listado de Nomenclatura" data-submenu="listado_nomenclatura" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
-            <i class="icon ion-md-document"></i> <span>Listado de Nomenclatura</span>
-        </a>
-    </div>
+        <div class="submenu" data-parent="administracion">
+            <a href="{% url 'periodo_list' %}" data-tooltip="Periodos" data-submenu="periodos" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
+                <i class="icon ion-md-calendar"></i> <span>Periodos</span>
+            </a>
+            <a href="{% url 'empresa_list' %}" data-tooltip="Empresas" data-submenu="empresas" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
+                <i class="icon ion-md-business"></i> <span>Empresas</span>
+            </a>
+            <a href="{% url 'grupo_list' %}" data-tooltip="Nomenclatura" data-submenu="nomenclatura" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
+                <i class="icon ion-md-list"></i> <span>Nomenclatura</span>
+            </a>
+            <a href="{% url 'nomenclatura_listado' %}" data-tooltip="Listado de Nomenclatura" data-submenu="listado_nomenclatura" data-parent-menu="administracion" onclick="return handleSubmenuClick(this, event, 'administracion')">
+                <i class="icon ion-md-document"></i> <span>Listado de Nomenclatura</span>
+            </a>
+        </div>
     <hr>
     
     <!-- CONTABILIDAD -->
@@ -48,7 +48,7 @@
         </div>
     </div>
     <div class="submenu" data-parent="contabilidad">
-        <a href="/contabilidad/proveedores/" data-tooltip="Proveedores" data-submenu="proveedores" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+         <a href="{% url 'proveedor_list' %}" data-tooltip="Proveedores" data-submenu="proveedores" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-people"></i> <span>Proveedores</span>
         </a>
         <a href="/contabilidad/listado-asientos/" data-tooltip="Listado de Asientos" data-submenu="listado_asientos" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
@@ -103,7 +103,6 @@
 </button>
 
 <style>
-    /* Estilo para el submenú seleccionado */
     .menu .submenu a.submenu-active {
         background: rgba(197, 160, 40, 0.2) !important;
         color: var(--gold-light) !important;
@@ -115,7 +114,6 @@
         color: var(--gold-light);
     }
     
-    /* Estilo para el menú padre cuando hay un submenú seleccionado */
     .menu .has-submenu.parent-with-active {
         background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%) !important;
         color: var(--navy-dark) !important;
@@ -131,7 +129,6 @@
         color: var(--navy-dark);
     }
     
-    /* Estilo para el botón Inicio */
     .menu .menu-item[data-menu="inicio"] {
         cursor: pointer;
     }
@@ -149,46 +146,34 @@
 </style>
 
 <script>
-    // Función para manejar clic en Inicio
     function setActiveMenu(element, event) {
         if (event) event.preventDefault();
         
-        // Limpiar TODOS los activos
         document.querySelectorAll('.menu .menu-item, .menu > a').forEach(item => {
             item.classList.remove('active');
         });
         
-        // Marcar Inicio como activo
         element.classList.add('active');
         
-        // Limpiar localStorage de selecciones de submenús
         localStorage.removeItem('activeParentMenu');
         localStorage.removeItem('activeSubmenu');
         localStorage.setItem('activeMenu', 'inicio');
         
-        // Redirigir a home
         window.location.href = '/home/';
     }
     
-    // Función para manejar clic en submenús - CORREGIDA (permite navegación)
     function handleSubmenuClick(selectedLink, event, parentMenuName) {
-        // Obtener el href
         const href = selectedLink.getAttribute('href');
-        
-        // Verificar si es un enlace válido (no es # y no está vacío)
         const isValidLink = href && href !== '#';
         
-        // Solo prevenir el comportamiento por defecto si NO es un enlace válido
         if (!isValidLink) {
             if (event) event.preventDefault();
         }
         
-        // Limpiar TODOS los activos de menús principales
         document.querySelectorAll('.menu > .menu-item, .menu > a').forEach(item => {
             item.classList.remove('active');
         });
         
-        // Limpiar estilos de submenús anteriores
         document.querySelectorAll('.menu .has-submenu').forEach(parent => {
             parent.classList.remove('active', 'parent-with-active');
         });
@@ -196,28 +181,23 @@
             subitem.classList.remove('submenu-active');
         });
         
-        // Activar el padre (menú principal)
         const parentMenuItem = document.querySelector(`.menu .has-submenu[data-menu="${parentMenuName}"]`);
         if (parentMenuItem) {
             parentMenuItem.classList.add('active', 'parent-with-active');
         }
         
-        // Activar el submenú clickeado
         selectedLink.classList.add('submenu-active');
         
-        // Guardar en localStorage
         const submenuId = selectedLink.getAttribute('data-submenu');
         if (submenuId && parentMenuName) {
             localStorage.setItem('activeParentMenu', parentMenuName);
             localStorage.setItem('activeSubmenu', submenuId);
         }
         
-        // Si es un enlace válido, permitir la navegación natural
         if (isValidLink) {
             return true;
         }
         
-        // Si no es válido, cerrar el submenú
         setTimeout(() => {
             if (parentMenuItem) {
                 parentMenuItem.classList.remove('open');
@@ -231,14 +211,12 @@
         return false;
     }
     
-    // Función para toggle de submenús
     function toggleSubmenu(element, event) {
         if (event) event.stopPropagation();
         
         const isCurrentlyOpen = element.classList.contains('open');
         const currentMenuId = element.getAttribute('data-menu');
         
-        // Cerrar TODOS los submenús
         const allSubmenus = document.querySelectorAll('.menu .has-submenu');
         allSubmenus.forEach(submenu => {
             submenu.classList.remove('open');
@@ -248,7 +226,6 @@
             }
         });
         
-        // Si el que clickeamos NO estaba abierto, lo abrimos
         if (!isCurrentlyOpen) {
             element.classList.add('open');
             const submenu = element.nextElementSibling;
@@ -261,7 +238,6 @@
         }
     }
     
-    // Función para toggle del sidebar
     function toggleSidebar() {
         const sidebar = document.getElementById('sidebar-container');
         const mainContent = document.querySelector('.main-content-area');
@@ -287,9 +263,7 @@
         }
     }
     
-    // RESTAURAR ESTADO AL CARGAR
     document.addEventListener('DOMContentLoaded', function() {
-        // Restaurar estado del sidebar
         const savedCollapsed = localStorage.getItem('sidebarCollapsed');
         if (savedCollapsed === 'true') {
             const sidebar = document.getElementById('sidebar-container');
@@ -300,7 +274,6 @@
             topBar.classList.add('expanded');
         }
         
-        // Limpiar estados previos
         document.querySelectorAll('.menu .menu-item, .menu > a').forEach(item => {
             item.classList.remove('active');
         });
@@ -314,7 +287,6 @@
             submenu.classList.remove('open');
         });
         
-        // Restaurar submenú abierto
         const openSubmenu = localStorage.getItem('openSubmenu');
         if (openSubmenu) {
             const submenuToOpen = document.querySelector(`.menu .has-submenu[data-menu="${openSubmenu}"]`);
@@ -327,7 +299,6 @@
             }
         }
         
-        // Restaurar submenú activo
         const activeParentMenu = localStorage.getItem('activeParentMenu');
         const activeSubmenu = localStorage.getItem('activeSubmenu');
         
@@ -340,7 +311,6 @@
             if (activeSubmenuItem) {
                 activeSubmenuItem.classList.add('submenu-active');
             }
-            // Abrir el submenú del padre
             if (parentMenuItem && !parentMenuItem.classList.contains('open')) {
                 parentMenuItem.classList.add('open');
                 const submenuDiv = parentMenuItem.nextElementSibling;
@@ -349,7 +319,6 @@
                 }
             }
         } else {
-            // Restaurar menú normal activo (Inicio)
             const activeMenu = localStorage.getItem('activeMenu');
             if (activeMenu === 'inicio') {
                 const inicioItem = document.querySelector('.menu .menu-item[data-menu="inicio"]');
@@ -359,7 +328,6 @@
             }
         }
         
-        // Determinar por URL actual
         const currentUrl = window.location.pathname;
         if (currentUrl === '/home/' || currentUrl === '/') {
             const inicioItem = document.querySelector('.menu .menu-item[data-menu="inicio"]');
@@ -374,7 +342,6 @@
             }
         }
         
-        // Detectar si estamos en la página de periodos y activar el menú correspondiente
         if (currentUrl.includes('/administracion/periodos/')) {
             const parentMenuItem = document.querySelector('.menu .has-submenu[data-menu="administracion"]');
             if (parentMenuItem) {
@@ -383,7 +350,6 @@
                 });
                 parentMenuItem.classList.add('active', 'parent-with-active');
                 
-                // Marcar el submenú como activo
                 const submenuItem = document.querySelector('.menu a[data-submenu="periodos"]');
                 if (submenuItem) {
                     submenuItem.classList.add('submenu-active');

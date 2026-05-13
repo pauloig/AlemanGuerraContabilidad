@@ -1,0 +1,283 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    {% if empresa %}
+        <i class="fas fa-edit"></i>
+    {% else %}
+        <i class="fas fa-plus-circle"></i>
+    {% endif %}
+{% endblock %}
+
+{% block page_title %}
+    {% if empresa %}
+        Editar Empresa: {{ empresa.razon_social }}
+    {% else %}
+        Nueva Empresa
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+    .form-container {
+        max-width: 700px;
+        margin: 0 auto;
+    }
+    
+    .form-card {
+        background: white;
+        border-radius: 20px;
+        padding: 30px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--navy-dark);
+        font-size: 13px;
+    }
+    
+    .form-control-custom {
+        width: 100%;
+        padding: 12px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        transition: all 0.3s;
+        font-size: 14px;
+    }
+    
+    .form-control-custom:focus {
+        border-color: var(--gold-primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(197,160,40,0.1);
+    }
+    
+    textarea.form-control-custom {
+        resize: vertical;
+        min-height: 60px;
+    }
+    
+    .form-check {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        margin-top: 8px;
+    }
+    
+    .form-check-input {
+        width: 18px;
+        height: 18px;
+        cursor: pointer;
+    }
+    
+    .form-check-label {
+        margin-bottom: 0;
+        cursor: pointer;
+        font-weight: normal;
+    }
+    
+    .form-actions {
+        display: flex;
+        gap: 15px;
+        margin-top: 30px;
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .btn-submit:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+    }
+    
+    .btn-cancel {
+        background: #e2e8f0;
+        color: var(--navy-dark);
+        border: none;
+        padding: 12px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        text-align: center;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel:hover {
+        background: #cbd5e1;
+    }
+    
+    .error-message {
+        color: #dc2626;
+        font-size: 12px;
+        margin-top: 5px;
+    }
+    
+    .help-text {
+        color: #64748b;
+        font-size: 11px;
+        margin-top: 5px;
+    }
+    
+    .row-2cols {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 20px;
+    }
+    
+    @media (max-width: 600px) {
+        .row-2cols {
+            grid-template-columns: 1fr;
+            gap: 0;
+        }
+    }
+</style>
+
+<div class="form-container">
+    <div class="form-card">
+        <form method="POST">
+            {% csrf_token %}
+            
+            <div class="row-2cols">
+                <div class="form-group">
+                    <label for="{{ form.nit.id_for_label }}">
+                        NIT <span style="color: #dc2626;">*</span>
+                    </label>
+                    {{ form.nit }}
+                    {% if form.nit.errors %}
+                        {% for error in form.nit.errors %}
+                            <div class="error-message">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                    <div class="help-text">Número de identificación tributaria</div>
+                </div>
+                
+                <div class="form-group">
+                    <label for="{{ form.fecha_vencimiento.id_for_label }}">
+                        Fecha de Vencimiento <span style="color: #dc2626;">*</span>
+                    </label>
+                    {{ form.fecha_vencimiento }}
+                    {% if form.fecha_vencimiento.errors %}
+                        {% for error in form.fecha_vencimiento.errors %}
+                            <div class="error-message">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.razon_social.id_for_label }}">
+                    Razón Social <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.razon_social }}
+                {% if form.razon_social.errors %}
+                    {% for error in form.razon_social.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.nombre_comercial.id_for_label }}">Nombre Comercial</label>
+                {{ form.nombre_comercial }}
+                {% if form.nombre_comercial.errors %}
+                    {% for error in form.nombre_comercial.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Nombre de fantasía o marca (opcional)</div>
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.direccion_fiscal.id_for_label }}">
+                    Dirección Fiscal <span style="color: #dc2626;">*</span>
+                </label>
+                {{ form.direccion_fiscal }}
+                {% if form.direccion_fiscal.errors %}
+                    {% for error in form.direccion_fiscal.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+            </div>
+            
+            <div class="form-group">
+                <label for="{{ form.direccion_comercial.id_for_label }}">Dirección Comercial</label>
+                {{ form.direccion_comercial }}
+                {% if form.direccion_comercial.errors %}
+                    {% for error in form.direccion_comercial.errors %}
+                        <div class="error-message">{{ error }}</div>
+                    {% endfor %}
+                {% endif %}
+                <div class="help-text">Dirección de operaciones (opcional)</div>
+            </div>
+            
+            <div class="row-2cols">
+                <div class="form-group">
+                    <label for="{{ form.propietario.id_for_label }}">
+                        Propietario/Representante <span style="color: #dc2626;">*</span>
+                    </label>
+                    {{ form.propietario }}
+                    {% if form.propietario.errors %}
+                        {% for error in form.propietario.errors %}
+                            <div class="error-message">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                </div>
+                
+                <div class="form-group">
+                    <div class="form-check">
+                        {{ form.es_sociedad }}
+                        <label class="form-check-label" for="{{ form.es_sociedad.id_for_label }}">
+                            ¿Es Sociedad?
+                        </label>
+                    </div>
+                    {% if form.es_sociedad.errors %}
+                        {% for error in form.es_sociedad.errors %}
+                            <div class="error-message">{{ error }}</div>
+                        {% endfor %}
+                    {% endif %}
+                    <div class="help-text">Marque si es una sociedad anónima o colectiva</div>
+                </div>
+            </div>
+            
+            {% if form.non_field_errors %}
+                <div class="error-message" style="margin-bottom: 20px;">
+                    {% for error in form.non_field_errors %}
+                        {{ error }}
+                    {% endfor %}
+                </div>
+            {% endif %}
+            
+            <div class="form-actions">
+                <button type="submit" class="btn-submit">
+                    <i class="fas fa-save"></i> {{ action }}
+                </button>
+                <a href="{% url 'empresa_list' %}" class="btn-cancel">
+                    <i class="fas fa-times"></i> Cancelar
+                </a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.querySelectorAll('input, select, textarea').forEach(field => {
+        if (!field.classList.contains('form-check-input')) {
+            field.classList.add('form-control-custom');
+        }
+    });
+</script>
+{% endblock %}
