@@ -1,0 +1,206 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    <i class="fas fa-eye"></i>
+{% endblock %}
+
+{% block page_title %}
+    Ver Asiento #{{ asiento.correlativo }}
+{% endblock %}
+
+{% block content %}
+<style>
+    .view-container {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+    
+    .view-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    
+    .info-box {
+        background: #f8fafc;
+        border-left: 4px solid #16a34a;
+        padding: 12px 15px;
+        margin-bottom: 20px;
+        border-radius: 8px;
+    }
+    
+    .info-box i {
+        color: #16a34a;
+        margin-right: 8px;
+    }
+    
+    .info-box span {
+        font-size: 13px;
+        color: #64748b;
+    }
+    
+    .field-group {
+        margin-bottom: 20px;
+    }
+    
+    .field-group label {
+        font-weight: 600;
+        color: var(--navy-dark);
+        font-size: 13px;
+        margin-bottom: 5px;
+        display: block;
+    }
+    
+    .field-value {
+        padding: 10px 0;
+        font-size: 14px;
+        color: #334155;
+    }
+    
+    .movimientos-table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+    }
+    
+    .movimientos-table th {
+        text-align: left;
+        padding: 12px;
+        background: #f8fafc;
+        color: var(--navy-dark);
+        font-weight: 600;
+        font-size: 12px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    
+    .movimientos-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+    
+    .debe-total {
+        color: #16a34a;
+        font-weight: 700;
+    }
+    
+    .haber-total {
+        color: #dc2626;
+        font-weight: 700;
+    }
+    
+    .btn-back {
+        background: #64748b;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.3s;
+        display: inline-block;
+    }
+    
+    .btn-back:hover {
+        background: #475569;
+        transform: translateY(-2px);
+        color: white;
+    }
+    
+    .badge-finalizado {
+        background: #dcfce7;
+        color: #16a34a;
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 600;
+        display: inline-block;
+    }
+</style>
+
+<div class="view-container">
+    <div class="view-card">
+        <div class="info-box">
+            <i class="fas fa-lock"></i>
+            <span>Este asiento está finalizado y es de solo lectura.</span>
+        </div>
+        
+        <div class="row">
+            <div class="col-md-4">
+                <div class="field-group">
+                    <label>Fecha</label>
+                    <div class="field-value">{{ asiento.fecha|date:"d/m/Y" }}</div>
+                </div>
+            </div>
+            <div class="col-md-8">
+                <div class="field-group">
+                    <label>Comentario</label>
+                    <div class="field-value">{{ asiento.comentario }}</div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="movimientos-table-container">
+            <h4 style="color: var(--navy-dark); margin-bottom: 15px;">
+                <i class="fas fa-exchange-alt"></i> Movimientos
+            </h4>
+            
+            <table class="movimientos-table">
+                <thead>
+                    <tr>
+                        <th>Cuenta</th>
+                        <th>Detalle</th>
+                        <th style="text-align: right;">Debe</th>
+                        <th style="text-align: right;">Haber</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for movimiento in movimientos %}
+                    <tr>
+                        <td>{{ movimiento.id_cuenta.nombre }}</td>
+                        <td>
+                            {% if movimiento.total_detalles > 0 %}
+                            <span class="badge-gold" style="font-size: 10px;">
+                                <i class="fas fa-receipt"></i> {{ movimiento.total_detalles|floatformat:2 }}/{{ movimiento.monto|floatformat:2 }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">Sin detalles</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">Q {{ movimiento.monto|floatformat:2 }}</td>
+                        <td style="text-align: right;">Q {{ movimiento.monto|floatformat:2 }}</td>
+                    </tr>
+                    {% empty %}
+                    <tr>
+                        <td colspan="4" style="text-align: center; padding: 40px;">
+                            No hay movimientos registrados
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr style="background: #f1f5f9; font-weight: 700;">
+                        <td colspan="2"><strong>TOTALES</strong></td>
+                        <td style="text-align: right;" class="debe-total">
+                            Q {{ total_debe|floatformat:2 }}
+                        </td>
+                        <td style="text-align: right;" class="haber-total">
+                            Q {{ total_haber|floatformat:2 }}
+                        </td>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <div class="form-actions" style="margin-top: 25px;">
+            <a href="{% url 'asiento_list' %}" class="btn-back">
+                <i class="fas fa-arrow-left"></i> Volver
+            </a>
+        </div>
+    </div>
+</div>
+{% endblock %}

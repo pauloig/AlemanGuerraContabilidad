@@ -254,3 +254,36 @@ class EmpresaPeriodoAdmin(admin.ModelAdmin):
             ).update(estatus=False)
         
         super().save_model(request, obj, form, change)
+        
+        
+@admin.register(Asiento)
+class AsientoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'correlativo', 'fecha', 'comentario', 'estatus', 'id_empresa_periodo']
+    list_filter = ['estatus', 'fecha']
+    search_fields = ['comentario', 'correlativo']
+    readonly_fields = ['correlativo', 'anio', 'mes', 'creado_por', 'modificado_por', 'fecha_creacion', 'fecha_modificacion']
+    
+    def save_model(self, request, obj, form, change):
+        if not change:
+            obj.creado_por = request.user
+        obj.modificado_por = request.user
+        super().save_model(request, obj, form, change)
+
+
+@admin.register(Movimiento)
+class MovimientoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'id_asiento', 'id_cuenta', 'tipo_movimiento', 'monto']
+    list_filter = ['tipo_movimiento']
+    search_fields = ['id_asiento__correlativo', 'id_cuenta__nombre']
+
+
+@admin.register(DetalleMovimiento)
+class DetalleMovimientoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'id_movimiento', 'nombre', 'monto']
+    search_fields = ['nombre']
+
+
+@admin.register(CorrelativoAsiento)
+class CorrelativoAsientoAdmin(admin.ModelAdmin):
+    list_display = ['id', 'id_empresa', 'anio', 'mes', 'ultimo_correlativo']
+    list_filter = ['id_empresa', 'anio', 'mes']

@@ -1,10 +1,21 @@
 from django.shortcuts import render, redirect, get_object_or_404
 from django.contrib.auth.decorators import login_required
+from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.db.models import Q
+from django.db.models import Sum, Q
+from django.db import transaction
+from django.http import JsonResponse, HttpResponse
 from .models import *
 from .forms import *
+from django.utils import timezone
+from datetime import datetime, date
+import json
+from .services.libro_diario_service import LibroDiarioService
+from openpyxl import Workbook
+from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
+from openpyxl.utils import get_column_letter
 
 @login_required
 def periodo_list(request):
@@ -987,3 +998,926 @@ def empresa_periodo_delete(request, pk):
         'app_selected': 7,
     }
     return render(request, 'administracion/empresa_periodo_confirm_delete.html', context)
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def set_empresa_context(request):
+    """API para establecer la empresa activa"""
+    if request.method == 'POST':
+        empresa_id = request.POST.get('empresa_id')
+        if empresa_id:
+            try:
+                empresa = Empresa.objects.get(id=empresa_id)
+                
+                # Verificar si la empresa tiene períodos asignados
+                periodos_asignados = EmpresaPeriodo.objects.filter(id_empresa=empresa)
+                
+                if not periodos_asignados.exists():
+                    return JsonResponse({
+                        'success': False,
+                        'error': 'Esta empresa no tiene períodos asignados. Debe asignar un período primero.'
+                    })
+                
+                # Buscar período activo
+                periodo_activo = periodos_asignados.filter(estatus=True).first()
+                
+                if periodo_activo:
+                    # La empresa tiene período activo - guardar el ID del EmpresaPeriodo
+                    request.session['empresa_activa_id'] = int(empresa_id)
+                    request.session['empresa_periodo_activo_id'] = periodo_activo.id  # Guardar ID del EmpresaPeriodo
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'periodo_activo': True,
+                        'periodo_nombre': periodo_activo.id_periodo.nombre,
+                        'empresa_periodo_id': periodo_activo.id
+                    })
+                else:
+                    # La empresa tiene períodos pero ninguno activo
+                    periodos_list = []
+                    for ep in periodos_asignados:
+                        periodos_list.append({
+                            'id': ep.id,
+                            'periodo_id': ep.id_periodo.id,
+                            'nombre': ep.id_periodo.nombre
+                        })
+                    
+                    return JsonResponse({
+                        'success': True,
+                        'periodo_activo': False,
+                        'tiene_periodos': True,
+                        'periodos': periodos_list
+                    })
+                    
+            except Empresa.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Empresa no encontrada'})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def set_periodo_context(request):
+    """API para establecer el período activo"""
+    if request.method == 'POST':
+        empresa_periodo_id = request.POST.get('periodo_id')  # Este es el ID del EmpresaPeriodo
+        if empresa_periodo_id:
+            try:
+                empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo', 'id_empresa').get(id=empresa_periodo_id)
+                
+                # Activar este período y desactivar los demás
+                EmpresaPeriodo.objects.filter(
+                    id_empresa=empresa_periodo.id_empresa
+                ).update(estatus=False)
+                
+                empresa_periodo.estatus = True
+                empresa_periodo.save()
+                
+                request.session['empresa_activa_id'] = empresa_periodo.id_empresa.id
+                request.session['empresa_periodo_activo_id'] = empresa_periodo.id
+                
+                return JsonResponse({'success': True, 'periodo_nombre': empresa_periodo.id_periodo.nombre})
+            except EmpresaPeriodo.DoesNotExist:
+                return JsonResponse({'success': False, 'error': 'Período no encontrado'})
+    
+    return JsonResponse({'success': False, 'error': 'Método no permitido'})
+
+# ==================== FUNCIÓN PARA GENERAR CORRELATIVO ====================
+
+def generar_correlativo(empresa_periodo_id, fecha):
+    """
+    Genera el siguiente correlativo para un asiento por empresa y mes
+    """
+    with transaction.atomic():
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_empresa').get(id=empresa_periodo_id)
+        empresa = empresa_periodo.id_empresa
+        anio = fecha.year
+        mes = fecha.month
+        
+        correlativo_obj, created = CorrelativoAsiento.objects.select_for_update().get_or_create(
+            id_empresa=empresa,
+            anio=anio,
+            mes=mes,
+            defaults={'ultimo_correlativo': 0}
+        )
+        
+        correlativo_obj.ultimo_correlativo += 1
+        correlativo_obj.save()
+        
+        nuevo_correlativo = correlativo_obj.ultimo_correlativo
+        
+        # Verificar que el correlativo no exista ya
+        while Asiento.objects.filter(
+            id_empresa_periodo_id=empresa_periodo_id,
+            correlativo=nuevo_correlativo
+        ).exists():
+            nuevo_correlativo += 1
+            correlativo_obj.ultimo_correlativo = nuevo_correlativo
+            correlativo_obj.save()
+        
+        return nuevo_correlativo, anio, mes
+
+
+# ==================== VISTAS PARA ASIENTOS ====================
+
+@login_required
+def asiento_list(request):
+    """
+    Listado de asientos del período activo
+    """
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+    
+    # Verificar si hay empresa y período seleccionados
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo para ver los asientos.')
+        context = {
+            'asientos': [],
+            'empresa_periodo': None,
+            'search_query': '',
+            'estatus_filter': '',
+            'total_asientos': 0,
+            'app_selected': 7,
+        }
+        return render(request, 'administracion/asiento_list.html', context)
+    
+    # Verificar que el EmpresaPeriodo existe
+    try:
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_empresa', 'id_periodo').get(
+            id=empresa_periodo_activo_id,
+            id_empresa_id=empresa_activa_id
+        )
+    except EmpresaPeriodo.DoesNotExist:
+        messages.error(request, 'El período seleccionado ya no existe. Por favor seleccione otro.')
+        request.session.pop('empresa_periodo_activo_id', None)
+        context = {
+            'asientos': [],
+            'empresa_periodo': None,
+            'search_query': '',
+            'estatus_filter': '',
+            'total_asientos': 0,
+            'app_selected': 7,
+        }
+        return render(request, 'administracion/asiento_list.html', context)
+    
+    search_query = request.GET.get('search', '')
+    estatus_filter = request.GET.get('estatus', '')
+    
+    asientos = Asiento.objects.filter(id_empresa_periodo=empresa_periodo)
+    
+    if search_query:
+        asientos = asientos.filter(comentario__icontains=search_query)
+    
+    if estatus_filter:
+        asientos = asientos.filter(estatus=estatus_filter)
+    
+    # Agregar totales a cada asiento
+    for asiento in asientos:
+        asiento.total_debe = asiento.get_total_debe()
+        asiento.total_haber = asiento.get_total_haber()
+    
+    paginator = Paginator(asientos, 15)
+    page_number = request.GET.get('page')
+    page_obj = paginator.get_page(page_number)
+    
+    context = {
+        'asientos': page_obj,
+        'empresa_periodo': empresa_periodo,
+        'search_query': search_query,
+        'estatus_filter': estatus_filter,
+        'total_asientos': asientos.count(),
+        'app_selected': 7,
+    }
+    return render(request, 'administracion/asiento_list.html', context)
+
+
+
+def asiento_create(request):
+    """
+    Crear nuevo asiento (pantalla única)
+    """
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+    
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': 'Debe seleccionar una empresa y un período activo'})
+        messages.error(request, 'Debe seleccionar una empresa y un período activo para crear un asiento')
+        return redirect('asiento_list')
+    
+    try:
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_empresa', 'id_periodo').get(
+            id=empresa_periodo_activo_id,
+            id_empresa_id=empresa_activa_id
+        )
+    except EmpresaPeriodo.DoesNotExist:
+        request.session.pop('empresa_periodo_activo_id', None)
+        if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+            return JsonResponse({'success': False, 'error': 'El período seleccionado ya no existe'})
+        messages.error(request, 'El período seleccionado ya no existe')
+        return redirect('asiento_list')
+    
+    # Manejar solicitud AJAX
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        action = request.POST.get('action')
+        
+        if action == 'guardar_encabezado':
+            form = AsientoForm(request.POST, empresa_periodo=empresa_periodo)
+            if form.is_valid():
+                try:
+                    with transaction.atomic():
+                        asiento = form.save(commit=False)
+                        asiento.id_empresa_periodo = empresa_periodo
+                        asiento.creado_por = request.user
+                        asiento.modificado_por = request.user
+                        
+                        # Generar correlativo
+                        correlativo, anio, mes = generar_correlativo(empresa_periodo.id, asiento.fecha)
+                        asiento.correlativo = correlativo
+                        asiento.anio = anio
+                        asiento.mes = mes
+                        
+                        asiento.save()
+                        
+                        return JsonResponse({
+                            'success': True, 
+                            'asiento_id': asiento.id, 
+                            'redirect': f'/administracion/asientos/editar/{asiento.id}/'
+                        })
+                except Exception as e:
+                    return JsonResponse({'success': False, 'error': str(e)})
+            else:
+                errors = {}
+                for field, error_list in form.errors.items():
+                    errors[field] = error_list[0]
+                return JsonResponse({'success': False, 'errors': errors})
+    
+    # GET request - mostrar formulario
+    form = AsientoForm(empresa_periodo=empresa_periodo)
+    
+    # Datos para selectores jerárquicos
+    grupos = Grupo.objects.all().order_by('nombre')
+    subgrupos = SubGrupo.objects.all().order_by('nombre')
+    cuentas = Cuenta.objects.select_related('id_subgrupo').all().order_by('nombre')
+    proveedores = Proveedor.objects.all().order_by('nombre')
+    
+    # Convertir a JSON
+    subgrupos_list = list(subgrupos.values('id', 'nombre', 'id_grupo_id'))
+    cuentas_list = list(cuentas.values('id', 'nombre', 'id_subgrupo_id'))
+    subgrupos_json = json.dumps(subgrupos_list)
+    cuentas_json = json.dumps(cuentas_list)
+    
+    # DEBUG - Imprimir en consola del servidor
+    print("=" * 50)
+    print("DEBUG - asiento_create")
+    print(f"Grupos encontrados: {grupos.count()}")
+    print(f"Subgrupos encontrados: {subgrupos.count()}")
+    print(f"Subgrupos JSON: {subgrupos_json[:500]}...")
+    print(f"Cuentas encontradas: {cuentas.count()}")
+    print(f"Cuentas JSON: {cuentas_json[:500]}...")
+    print("=" * 50)
+    
+    context = {
+        'form': form,
+        'asiento': None,
+        'movimientos': [],
+        'grupos': grupos,
+        'subgrupos_json': subgrupos_json,
+        'cuentas_json': cuentas_json,
+        'proveedores': proveedores,
+        'total_debe': 0,
+        'total_haber': 0,
+        'is_balanced': False,
+        'empresa_periodo': empresa_periodo,
+        'title': 'Nuevo Asiento',
+        'action': 'Crear',
+        'app_selected': 7,
+    }
+    return render(request, 'administracion/asiento_form.html', context)
+
+
+@login_required
+def asiento_edit(request, pk):
+    """
+    Editar asiento (solo si está en borrador)
+    """
+    asiento = get_object_or_404(Asiento, pk=pk)
+    
+    # Verificar que el asiento pertenece al período activo actual
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+    if asiento.id_empresa_periodo.id != empresa_periodo_activo_id:
+        messages.warning(request, 'Este asiento no pertenece al período activo actual.')
+        return redirect('asiento_list')
+    
+    if asiento.estatus == 1:
+        messages.error(request, 'No se puede editar un asiento finalizado')
+        return redirect('asiento_list')
+    
+    # Manejar solicitud AJAX
+    if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        action = request.POST.get('action')
+        
+        if action == 'guardar_encabezado':
+            form = AsientoForm(request.POST, instance=asiento, empresa_periodo=asiento.id_empresa_periodo)
+            if form.is_valid():
+                asiento = form.save(commit=False)
+                asiento.modificado_por = request.user
+                asiento.save()
+                return JsonResponse({'success': True})
+            else:
+                errors = {}
+                for field, error_list in form.errors.items():
+                    errors[field] = error_list[0]
+                return JsonResponse({'success': False, 'errors': errors})
+        
+        elif action == 'finalizar':
+            if asiento.is_balanced():
+                asiento.estatus = 1
+                asiento.modificado_por = request.user
+                asiento.save()
+                return JsonResponse({'success': True, 'redirect': '/administracion/asientos/'})
+            else:
+                return JsonResponse({'success': False, 'error': 'El total Debe debe ser igual al total Haber'})
+    
+    # GET request - mostrar formulario
+    form = AsientoForm(instance=asiento, empresa_periodo=asiento.id_empresa_periodo)
+    movimientos = asiento.movimientos.select_related('id_cuenta').all()
+    
+    # Agregar totales y estado de detalles
+    for mov in movimientos:
+        mov.total_detalles = mov.get_total_detalles()
+        mov.detalles_completos = mov.detalles_completos()
+    
+    # Datos para selectores jerárquicos
+    grupos = Grupo.objects.all().order_by('nombre')
+    subgrupos = SubGrupo.objects.all().order_by('nombre')
+    cuentas = Cuenta.objects.select_related('id_subgrupo').all().order_by('nombre')
+    proveedores = Proveedor.objects.all().order_by('nombre')
+    
+    # Convertir a JSON
+    subgrupos_list = list(subgrupos.values('id', 'nombre', 'id_grupo_id'))
+    cuentas_list = list(cuentas.values('id', 'nombre', 'id_subgrupo_id'))
+    subgrupos_json = json.dumps(subgrupos_list)
+    cuentas_json = json.dumps(cuentas_list)
+    
+    # DEBUG - Imprimir en consola del servidor
+    print("=" * 50)
+    print("DEBUG - asiento_edit")
+    print(f"Asiento ID: {asiento.id}")
+    print(f"Grupos encontrados: {grupos.count()}")
+    print(f"Subgrupos encontrados: {subgrupos.count()}")
+    print(f"Primer subgrupo: id={subgrupos_list[0] if subgrupos_list else 'None'}")
+    print(f"Cuentas encontradas: {cuentas.count()}")
+    print("=" * 50)
+    
+    context = {
+        'form': form,
+        'asiento': asiento,
+        'movimientos': movimientos,
+        'grupos': grupos,
+        'subgrupos_json': subgrupos_json,
+        'cuentas_json': cuentas_json,
+        'proveedores': proveedores,
+        'total_debe': asiento.get_total_debe(),
+        'total_haber': asiento.get_total_haber(),
+        'is_balanced': asiento.is_balanced(),
+        'empresa_periodo': asiento.id_empresa_periodo,
+        'title': f'Editar Asiento #{asiento.correlativo}',
+        'action': 'Guardar',
+        'app_selected': 7,
+    }
+    return render(request, 'administracion/asiento_form.html', context)
+
+
+
+@login_required
+def asiento_delete(request, pk):
+    """
+    Eliminar asiento (solo si está en borrador)
+    """
+    asiento = get_object_or_404(Asiento, pk=pk)
+    
+    if asiento.estatus == 1:
+        messages.error(request, 'No se puede eliminar un asiento finalizado')
+        return redirect('asiento_list')
+    
+    if request.method == 'POST':
+        correlativo = asiento.correlativo
+        asiento.delete()
+        messages.success(request, f'Asiento #{correlativo} eliminado exitosamente')
+        return redirect('asiento_list')
+    
+    context = {
+        'asiento': asiento,
+        'app_selected': 7,
+    }
+    return render(request, 'administracion/asiento_confirm_delete.html', context)
+
+# ==================== VISTAS API PARA MOVIMIENTOS (AJAX) ====================
+
+@login_required
+@require_http_methods(["POST"])
+def movimiento_create(request):
+    """
+    Crear movimiento vía AJAX
+    """
+    asiento_id = request.POST.get('asiento_id')
+    asiento = get_object_or_404(Asiento, pk=asiento_id)
+    
+    if asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden agregar movimientos a un asiento finalizado'})
+    
+    form = MovimientoForm(request.POST)
+    if form.is_valid():
+        movimiento = form.save(commit=False)
+        movimiento.id_asiento = asiento
+        movimiento.creado_por = request.user
+        movimiento.modificado_por = request.user
+        movimiento.save()
+        
+        return JsonResponse({
+            'success': True,
+            'movimiento': {
+                'id': movimiento.id,
+                'cuenta_nombre': str(movimiento.id_cuenta),
+                'cuenta_id': movimiento.id_cuenta.id,
+                'monto': float(movimiento.monto),
+                'tipo': movimiento.tipo_movimiento,
+                'tipo_texto': movimiento.get_tipo_movimiento_display()
+            }
+        })
+    else:
+        errors = {}
+        for field, error_list in form.errors.items():
+            errors[field] = error_list[0]
+        return JsonResponse({'success': False, 'errors': errors})
+
+
+@login_required
+@require_http_methods(["POST"])
+def movimiento_delete(request):
+    """
+    Eliminar movimiento vía AJAX
+    """
+    movimiento_id = request.POST.get('movimiento_id')
+    movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
+    asiento = movimiento.id_asiento
+    
+    if asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden eliminar movimientos de un asiento finalizado'})
+    
+    movimiento.delete()
+    
+    return JsonResponse({
+        'success': True,
+        'totales': {
+            'debe': float(asiento.get_total_debe()),
+            'haber': float(asiento.get_total_haber())
+        }
+    })
+
+
+
+
+# ==================== VISTAS API PARA DETALLES (AJAX) ====================
+
+@login_required
+def detalle_list(request, movimiento_id):
+    """
+    Obtener lista de detalles de un movimiento (vía AJAX)
+    """
+    movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
+    detalles = movimiento.detalles.all().values('id', 'nombre', 'monto')
+    
+    return JsonResponse({
+        'success': True,
+        'detalles': list(detalles),
+        'total_detalles': float(movimiento.get_total_detalles()),
+        'monto_movimiento': float(movimiento.monto)
+    })
+
+
+@login_required
+@require_http_methods(["POST"])
+def detalle_create(request):
+    """
+    Crear detalle de movimiento vía AJAX
+    """
+    movimiento_id = request.POST.get('movimiento_id')
+    movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
+    
+    if movimiento.id_asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden agregar detalles a un asiento finalizado'})
+    
+    form = DetalleMovimientoForm(request.POST)
+    if form.is_valid():
+        detalle = form.save(commit=False)
+        detalle.id_movimiento = movimiento
+        detalle.creado_por = request.user
+        detalle.modificado_por = request.user
+        detalle.save()
+        
+        total_detalles = movimiento.get_total_detalles()
+        detalles_completos = total_detalles == movimiento.monto
+        
+        return JsonResponse({
+            'success': True,
+            'detalle': {
+                'id': detalle.id,
+                'nombre': detalle.nombre,
+                'monto': float(detalle.monto)
+            },
+            'total_detalles': float(total_detalles),
+            'monto_movimiento': float(movimiento.monto),
+            'detalles_completos': detalles_completos
+        })
+    else:
+        errors = {}
+        for field, error_list in form.errors.items():
+            errors[field] = error_list[0]
+        return JsonResponse({'success': False, 'errors': errors})
+
+
+@login_required
+@require_http_methods(["POST"])
+def detalle_delete(request):
+    """
+    Eliminar detalle de movimiento vía AJAX
+    """
+    detalle_id = request.POST.get('detalle_id')
+    detalle = get_object_or_404(DetalleMovimiento, pk=detalle_id)
+    movimiento = detalle.id_movimiento
+    
+    if movimiento.id_asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden eliminar detalles de un asiento finalizado'})
+    
+    detalle.delete()
+    
+    total_detalles = movimiento.get_total_detalles()
+    detalles_completos = total_detalles == movimiento.monto
+    
+    return JsonResponse({
+        'success': True,
+        'total_detalles': float(total_detalles),
+        'monto_movimiento': float(movimiento.monto),
+        'detalles_completos': detalles_completos
+    })
+    
+    
+# Agrega estas funciones al final de tu views.py
+
+@login_required
+def api_subgrupos_por_grupo(request, grupo_id):
+    """API para obtener subgrupos de un grupo específico"""
+    try:
+        subgrupos = SubGrupo.objects.filter(id_grupo_id=grupo_id).values('id', 'nombre')
+        return JsonResponse({
+            'success': True,
+            'subgrupos': list(subgrupos)
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+
+
+@login_required
+def api_cuentas_por_subgrupo(request, subgrupo_id):
+    """API para obtener cuentas de un subgrupo específico"""
+    try:
+        cuentas = Cuenta.objects.filter(id_subgrupo_id=subgrupo_id).values('id', 'nombre')
+        return JsonResponse({
+            'success': True,
+            'cuentas': list(cuentas)
+        })
+    except Exception as e:
+        return JsonResponse({'success': False, 'error': str(e)})
+    
+    
+@login_required
+def asiento_detail(request, pk):
+    """
+    Ver asiento finalizado (solo lectura)
+    """
+    asiento = get_object_or_404(Asiento, pk=pk)
+    movimientos = asiento.movimientos.select_related('id_cuenta').all()
+    
+    for mov in movimientos:
+        mov.total_detalles = mov.get_total_detalles()
+        mov.detalles_completos = mov.detalles_completos()
+    
+    context = {
+        'asiento': asiento,
+        'movimientos': movimientos,
+        'total_debe': asiento.get_total_debe(),
+        'total_haber': asiento.get_total_haber(),
+        'is_balanced': asiento.is_balanced(),
+        'app_selected': 7,
+    }
+    return render(request, 'administracion/asiento_detail.html', context)
+
+# ==================== LIBRO DIARIO ====================
+
+@login_required
+def libro_diario(request):
+    """
+    Reporte del Libro Diario con VAN/VIENEN
+    """
+    # Obtener empresa y período de la sesión
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+    
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+    
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        messages.error(request, 'No se encontró la empresa o período seleccionado')
+        return redirect('home')
+    
+    # Procesar filtros
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+    lineas_por_pagina = request.GET.get('lineas_por_pagina', 20)
+    
+    try:
+        lineas_por_pagina = int(lineas_por_pagina)
+        if lineas_por_pagina < 5 or lineas_por_pagina > 50:
+            lineas_por_pagina = 20
+    except ValueError:
+        lineas_por_pagina = 20
+    
+    # Fechas por defecto: todo el período
+    if fecha_desde:
+        try:
+            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_desde = periodo.fecha_inicial
+    else:
+        fecha_desde = periodo.fecha_inicial
+    
+    if fecha_hasta:
+        try:
+            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_hasta = periodo.fecha_final
+    else:
+        fecha_hasta = periodo.fecha_final
+    
+    # Validar rango de fechas
+    if fecha_desde > fecha_hasta:
+        messages.error(request, 'La fecha desde no puede ser mayor a la fecha hasta')
+        fecha_desde = periodo.fecha_inicial
+        fecha_hasta = periodo.fecha_final
+    
+    # Obtener asientos finalizados en el rango de fechas
+    asientos = Asiento.objects.filter(
+        id_empresa_periodo=empresa_periodo,
+        estatus=1,
+        fecha__range=[fecha_desde, fecha_hasta]
+    ).order_by('fecha', 'correlativo')
+    
+    if not asientos.exists():
+        messages.warning(request, 'No hay asientos finalizados en el período seleccionado')
+        return render(request, 'administracion/reportes/libro_diario.html', {
+            'sin_datos': True,
+            'empresa': empresa,
+            'periodo': periodo,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+            'lineas_por_pagina': lineas_por_pagina,
+            'app_selected': 7,
+        })
+    
+    # Obtener datos estructurados
+    datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+    
+    # Paginar con VAN/VIENEN
+    LibroDiarioService.LINEAS_POR_PAGINA = lineas_por_pagina
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
+    
+    # Totales generales
+    total_debe_general = sum(r['debe'] for r in datos)
+    total_haber_general = sum(r['haber'] for r in datos)
+    
+    context = {
+        'empresa': empresa,
+        'periodo': periodo,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+        'lineas_por_pagina': lineas_por_pagina,
+        'paginas': paginas,
+        'total_debe_general': total_debe_general,
+        'total_haber_general': total_haber_general,
+        'fecha_reporte': timezone.now(),
+        'sin_datos': False,
+        'app_selected': 7,
+    }
+    
+    return render(request, 'administracion/reportes/libro_diario.html', context)
+
+
+@login_required
+def libro_diario_excel(request):
+    """
+    Exportar Libro Diario a Excel con VAN/VIENEN
+    """
+    # Obtener empresa y período de la sesión
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+    
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+    
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        messages.error(request, 'No se encontró la empresa o período seleccionado')
+        return redirect('home')
+    
+    # Procesar filtros
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+    
+    if fecha_desde:
+        try:
+            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_desde = periodo.fecha_inicial
+    else:
+        fecha_desde = periodo.fecha_inicial
+    
+    if fecha_hasta:
+        try:
+            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
+        except ValueError:
+            fecha_hasta = periodo.fecha_final
+    else:
+        fecha_hasta = periodo.fecha_final
+    
+    # Obtener asientos
+    asientos = Asiento.objects.filter(
+        id_empresa_periodo=empresa_periodo,
+        estatus=1,
+        fecha__range=[fecha_desde, fecha_hasta]
+    ).order_by('fecha', 'correlativo')
+    
+    if not asientos.exists():
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('libro_diario')
+    
+    # Obtener datos y paginar
+    datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+    LibroDiarioService.LINEAS_POR_PAGINA = 30  # Para Excel, más líneas por página
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
+    
+    total_debe_general = sum(r['debe'] for r in datos)
+    total_haber_general = sum(r['haber'] for r in datos)
+    
+    # Crear workbook
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Libro Diario"
+    
+    # Estilos
+    header_font = Font(bold=True, size=11)
+    bold_font = Font(bold=True)
+    center_alignment = Alignment(horizontal='center', vertical='center')
+    right_alignment = Alignment(horizontal='right', vertical='center')
+    left_alignment = Alignment(horizontal='left', vertical='center')
+    thin_border = Border(
+        left=Side(style='thin'),
+        right=Side(style='thin'),
+        top=Side(style='thin'),
+        bottom=Side(style='thin')
+    )
+    gold_fill = PatternFill(start_color='F4B41A', end_color='F4B41A', fill_type='solid')
+    gray_fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
+    
+    fila_actual = 1
+    
+    # Para cada página
+    for pagina in paginas:
+        # Encabezado de la página
+        ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=5)
+        celda = ws.cell(row=fila_actual, column=1)
+        celda.value = f"LIBRO DIARIO - {empresa.nombre_comercial or empresa.razon_social}"
+        celda.font = Font(bold=True, size=14)
+        celda.alignment = center_alignment
+        fila_actual += 1
+        
+        ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=5)
+        celda = ws.cell(row=fila_actual, column=1)
+        celda.value = f"Período: {periodo.nombre} ({fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')})"
+        celda.alignment = center_alignment
+        fila_actual += 1
+        
+        fila_actual += 1
+        
+        # Encabezados de columnas
+        headers = ['Fecha', 'Asiento #', 'Cuenta / Detalle', 'Debe', 'Haber']
+        for col, header in enumerate(headers, 1):
+            celda = ws.cell(row=fila_actual, column=col, value=header)
+            celda.font = header_font
+            celda.alignment = center_alignment
+            celda.fill = gold_fill
+            celda.border = thin_border
+        fila_actual += 1
+        
+        # Línea VIENEN (si no es primera página)
+        if not pagina['es_primera'] and (pagina['vienen_debe'] > 0 or pagina['vienen_haber'] > 0):
+            ws.cell(row=fila_actual, column=1, value="").border = thin_border
+            ws.cell(row=fila_actual, column=2, value="").border = thin_border
+            celda = ws.cell(row=fila_actual, column=3, value="VIENEN (Vienen de página anterior)")
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda = ws.cell(row=fila_actual, column=4, value=float(pagina['vienen_debe']))
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda.alignment = right_alignment
+            celda = ws.cell(row=fila_actual, column=5, value=float(pagina['vienen_haber']))
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda.alignment = right_alignment
+            fila_actual += 1
+        
+        # Registros de la página
+        for registro in pagina['registros']:
+            ws.cell(row=fila_actual, column=1, value=registro['fecha'].strftime('%d/%m/%Y') if registro['fecha'] else "").border = thin_border
+            ws.cell(row=fila_actual, column=2, value=registro['correlativo'] if registro['correlativo'] else "").border = thin_border
+            ws.cell(row=fila_actual, column=3, value=registro['cuenta_nombre']).border = thin_border
+            celda = ws.cell(row=fila_actual, column=4, value=float(registro['debe']) if registro['debe'] > 0 else "")
+            celda.alignment = right_alignment
+            celda.border = thin_border
+            celda = ws.cell(row=fila_actual, column=5, value=float(registro['haber']) if registro['haber'] > 0 else "")
+            celda.alignment = right_alignment
+            celda.border = thin_border
+            fila_actual += 1
+        
+        # Línea VAN (si no es última página)
+        if not pagina['es_ultima'] and (pagina['van_debe'] > 0 or pagina['van_haber'] > 0):
+            ws.cell(row=fila_actual, column=1, value="").border = thin_border
+            ws.cell(row=fila_actual, column=2, value="").border = thin_border
+            celda = ws.cell(row=fila_actual, column=3, value="VAN (Van a siguiente página)")
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda = ws.cell(row=fila_actual, column=4, value=float(pagina['van_debe']))
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda.alignment = right_alignment
+            celda = ws.cell(row=fila_actual, column=5, value=float(pagina['van_haber']))
+            celda.font = bold_font
+            celda.fill = gray_fill
+            celda.border = thin_border
+            celda.alignment = right_alignment
+            fila_actual += 1
+        
+        # Salto de página (excepto última página)
+        if not pagina['es_ultima']:
+            ws.page_breaks.append(fila_actual)
+            fila_actual += 2
+    
+    # Totales generales al final
+    fila_actual += 1
+    
+    ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=3)
+    celda = ws.cell(row=fila_actual, column=1, value="TOTALES GENERALES")
+    celda.font = bold_font
+    celda.alignment = right_alignment
+    celda.border = thin_border
+    
+    celda = ws.cell(row=fila_actual, column=4, value=float(total_debe_general))
+    celda.font = bold_font
+    celda.border = thin_border
+    celda.alignment = right_alignment
+    
+    celda = ws.cell(row=fila_actual, column=5, value=float(total_haber_general))
+    celda.font = bold_font
+    celda.border = thin_border
+    celda.alignment = right_alignment
+    
+    # Ajustar anchos de columna
+    ws.column_dimensions['A'].width = 12
+    ws.column_dimensions['B'].width = 12
+    ws.column_dimensions['C'].width = 50
+    ws.column_dimensions['D'].width = 15
+    ws.column_dimensions['E'].width = 15
+    
+    # Configurar respuesta HTTP
+    nombre_archivo = f"Libro_Diario_{empresa.nombre_comercial or empresa.razon_social}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
+    
+    wb.save(response)
+    return response

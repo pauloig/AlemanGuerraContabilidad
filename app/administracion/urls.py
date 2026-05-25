@@ -1,23 +1,20 @@
-from turtle import home
 from django.contrib import admin
 from django.urls import path, include
 from . import views
 from administracion import views
 
 urlpatterns = [
-     
-     # URLs para Periodos
+    # URLs para Periodos
     path('periodos/', views.periodo_list, name='periodo_list'),
     path('periodos/crear/', views.periodo_create, name='periodo_create'),
     path('periodos/editar/<int:pk>/', views.periodo_edit, name='periodo_edit'),
     path('periodos/eliminar/<int:pk>/', views.periodo_delete, name='periodo_delete'),
     
-     # URLs para Empresas
+    # URLs para Empresas
     path('empresas/', views.empresa_list, name='empresa_list'),
     path('empresas/crear/', views.empresa_create, name='empresa_create'),
     path('empresas/editar/<int:pk>/', views.empresa_edit, name='empresa_edit'),
     path('empresas/eliminar/<int:pk>/', views.empresa_delete, name='empresa_delete'),
-    
     
     # URLs para Proveedores
     path('proveedores/', views.proveedor_list, name='proveedor_list'),
@@ -31,7 +28,7 @@ urlpatterns = [
     path('nomenclatura/editar/<int:pk>/', views.grupo_edit, name='grupo_edit'),
     path('nomenclatura/eliminar/<int:pk>/', views.grupo_delete, name='grupo_delete'),
     
-     # URLs para SubGrupos (anidado a Grupo)
+    # URLs para SubGrupos (anidado a Grupo)
     path('nomenclatura/grupo/<int:grupo_id>/subgrupos/', views.subgrupo_list, name='subgrupo_list'),
     path('nomenclatura/grupo/<int:grupo_id>/subgrupos/crear/', views.subgrupo_create, name='subgrupo_create'),
     path('nomenclatura/subgrupo/editar/<int:pk>/', views.subgrupo_edit, name='subgrupo_edit'),
@@ -52,10 +49,39 @@ urlpatterns = [
     path('sucursal/editar/<int:pk>/', views.sucursal_edit, name='sucursal_edit'),
     path('sucursal/eliminar/<int:pk>/', views.sucursal_delete, name='sucursal_delete'),
     
-     # URLs para EmpresaPeriodo (anidado a Empresa)
+    # URLs para EmpresaPeriodo (anidado a Empresa)
     path('empresa/<int:empresa_id>/periodos/', views.empresa_periodo_list, name='empresa_periodo_list'),
     path('empresa/<int:empresa_id>/periodos/asignar/', views.empresa_periodo_create, name='empresa_periodo_create'),
     path('empresa-periodo/predeterminar/<int:pk>/', views.empresa_periodo_set_default, name='empresa_periodo_set_default'),
     path('empresa-periodo/eliminar/<int:pk>/', views.empresa_periodo_delete, name='empresa_periodo_delete'),
     
-    ]
+    # APIs para selección de empresa/período
+    path('api/set-empresa-context/', views.set_empresa_context, name='set_empresa_context'),
+    path('api/set-periodo-context/', views.set_periodo_context, name='set_periodo_context'),
+    
+    # URLs para Asientos Contables
+    path('asientos/', views.asiento_list, name='asiento_list'),
+    path('asientos/crear/', views.asiento_create, name='asiento_create'),
+    path('asientos/editar/<int:pk>/', views.asiento_edit, name='asiento_edit'),
+    path('asientos/eliminar/<int:pk>/', views.asiento_delete, name='asiento_delete'),
+    path('asientos/detalle/<int:pk>/', views.asiento_detail, name='asiento_detail'),
+    
+    # URLs API para movimientos (AJAX)
+    path('api/movimiento/crear/', views.movimiento_create, name='movimiento_create'),
+    path('api/movimiento/eliminar/', views.movimiento_delete, name='movimiento_delete'),
+    
+    # URLs API para detalles (AJAX)
+    path('api/detalle/listar/<int:movimiento_id>/', views.detalle_list, name='detalle_list'),
+    path('api/detalle/crear/', views.detalle_create, name='detalle_create'),
+    path('api/detalle/eliminar/', views.detalle_delete, name='detalle_delete'),
+    
+    # Agrega estas líneas dentro de urlpatterns
+    # URLs API para selectores jerárquicos
+    path('api/subgrupos-por-grupo/<int:grupo_id>/', views.api_subgrupos_por_grupo, name='api_subgrupos_por_grupo'),
+    path('api/cuentas-por-subgrupo/<int:subgrupo_id>/', views.api_cuentas_por_subgrupo, name='api_cuentas_por_subgrupo'),   
+    
+
+    # Reportes
+    path('reportes/libro-diario/', views.libro_diario, name='libro_diario'),
+    path('reportes/libro-diario/excel/', views.libro_diario_excel, name='libro_diario_excel'),
+]

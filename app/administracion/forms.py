@@ -1,6 +1,8 @@
 from django import forms
 from .models import *
 from datetime import date
+from django.utils import timezone
+
 
 class PeriodoForm(forms.ModelForm):
     class Meta:
@@ -313,3 +315,100 @@ class EmpresaPeriodoForm(forms.ModelForm):
         # Ordenar por fecha_inicial (no por anio/mes)
         self.fields['id_periodo'].queryset = Periodo.objects.all().order_by('-fecha_inicial')
         self.fields['id_periodo'].empty_label = "Seleccione un período"
+        
+class AsientoForm(forms.ModelForm):
+    class Meta:
+        model = Asiento
+        fields = ['fecha', 'comentario']
+        widgets = {
+            'fecha': forms.DateInput(attrs={
+                'class': 'form-control-custom',
+                'type': 'date'
+            }),
+            'comentario': forms.Textarea(attrs={
+                'class': 'form-control-custom',
+                'rows': 2,
+                'placeholder': 'Descripción del asiento contable...'
+            }),
+        }
+        labels = {
+            'fecha': 'Fecha',
+            'comentario': 'Comentario',
+        }
+    
+    def __init__(self, *args, **kwargs):
+        self.empresa_periodo = kwargs.pop('empresa_periodo', None)
+        super().__init__(*args, **kwargs)
+    
+    def clean_fecha(self):
+        fecha = self.cleaned_data.get('fecha')
+        if self.empresa_periodo and fecha:
+            periodo = self.empresa_periodo.id_periodo
+            if fecha < periodo.fecha_inicial or fecha > periodo.fecha_final:
+                raise forms.ValidationError(
+                    f'La fecha debe estar dentro del período activo '
+                    f'({periodo.fecha_inicial.strftime("%d/%m/%Y")} - '
+                    f'{periodo.fecha_final.strftime("%d/%m/%Y")})'
+                )
+        return fecha
+
+
+class MovimientoForm(forms.ModelForm):
+    class Meta:
+        model = Movimiento
+        fields = ['id_cuenta', 'monto', 'tipo_movimiento']
+        widgets = {
+            'id_cuenta': forms.Select(attrs={
+                'class': 'form-control-custom movimiento-cuenta'
+            }),
+            'monto': forms.NumberInput(attrs={
+                'class': 'form-control-custom movimiento-monto',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+            'tipo_movimiento': forms.Select(attrs={
+                'class': 'form-control-custom movimiento-tipo'
+            }),
+        }
+        labels = {
+            'id_cuenta': 'Cuenta',
+            'monto': 'Monto',
+            'tipo_movimiento': 'Tipo',
+        }
+    
+    def clean(self):
+        cleaned_data = super().clean()
+        monto = cleaned_data.get('monto')
+        tipo = cleaned_data.get('tipo_movimiento')
+        
+        if monto and monto <= 0:
+            self.add_error('monto', 'El monto debe ser mayor a cero')
+        
+        return cleaned_data
+
+
+class DetalleMovimientoForm(forms.ModelForm):
+    class Meta:
+        model = DetalleMovimiento
+        fields = ['nombre', 'monto']
+        widgets = {
+            'nombre': forms.TextInput(attrs={
+                'class': 'form-control-custom',
+                'placeholder': 'Nombre del proveedor o descripción'
+            }),
+            'monto': forms.NumberInput(attrs={
+                'class': 'form-control-custom detalle-monto',
+                'step': '0.01',
+                'min': '0.01'
+            }),
+        }
+        labels = {
+            'nombre': 'Nombre/Proveedor',
+            'monto': 'Monto',
+        }
+    
+    def clean_monto(self):
+        monto = self.cleaned_data.get('monto')
+        if monto and monto <= 0:
+            raise forms.ValidationError('El monto debe ser mayor a cero')
+        return monto

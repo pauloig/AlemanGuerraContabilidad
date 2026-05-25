@@ -88,6 +88,7 @@
         cursor: pointer;
     }
     
+    /* Filter Buttons - ESTILOS CORREGIDOS */
     .filter-buttons {
         display: flex;
         gap: 8px;
@@ -113,6 +114,7 @@
     
     .filter-btn:hover {
         transform: translateY(-2px);
+        background: rgba(197,160,40,0.1);
     }
     
     .btn-add {
@@ -175,7 +177,7 @@
         background-color: #f9fafb;
     }
     
-    /* Status Badges */
+    /* Badges */
     .badge-sociedad {
         background: rgba(197,160,40,0.15);
         color: var(--gold-primary);
@@ -216,10 +218,21 @@
         display: inline-block;
     }
     
+    .badge-gold {
+        background: rgba(197,160,40,0.15);
+        color: var(--gold-primary);
+        padding: 4px 12px;
+        border-radius: 50px;
+        font-size: 11px;
+        font-weight: 600;
+        display: inline-block;
+    }
+    
     /* Action Buttons */
     .action-buttons {
         display: flex;
         gap: 8px;
+        flex-wrap: wrap;
     }
     
     .btn-icon {
@@ -234,6 +247,33 @@
         border: none;
         background: transparent;
         text-decoration: none;
+    }
+    
+    .btn-select {
+        color: #10b981;
+    }
+    
+    .btn-select:hover {
+        background: rgba(16,185,129,0.1);
+        transform: scale(1.05);
+    }
+    
+    .btn-sucursal {
+        color: #8b5cf6;
+    }
+    
+    .btn-sucursal:hover {
+        background: rgba(139,92,246,0.1);
+        transform: scale(1.05);
+    }
+    
+    .btn-periodo {
+        color: #3b82f6;
+    }
+    
+    .btn-periodo:hover {
+        background: rgba(59,130,246,0.1);
+        transform: scale(1.05);
     }
     
     .btn-edit {
@@ -302,33 +342,20 @@
         color: #64748b;
     }
     
-    /* NIT highlight */
     .nit-code {
         font-family: monospace;
         font-weight: 600;
         color: var(--gold-primary);
     }
-
-    .btn-sucursal {
-            color: #8b5cf6;
-        }
-
-        .btn-sucursal:hover {
-            background: rgba(139,92,246,0.1);
-            transform: scale(1.05);
-        }
-
-    .btn-periodo {
-        color: #10b981;
-    }
-
-    .btn-periodo:hover {
-        background: rgba(16,185,129,0.1);
-        transform: scale(1.05);
+    
+    /* Empresa seleccionada highlight */
+    .empresa-seleccionada {
+        background-color: rgba(197,160,40,0.1) !important;
+        border-left: 3px solid var(--gold-primary);
     }
 </style>
 
-<!-- Stats Cards 
+<!-- Stats Cards
 <div class="stats-row">
     <div class="stat-card">
         <div class="stat-icon"><i class="fas fa-building"></i></div>
@@ -345,8 +372,8 @@
         <div class="stat-number">{{ individuales }}</div>
         <div class="stat-label">Personas Individuales</div>
     </div>
-</div>
--->
+</div> -->
+
 <!-- Top Actions Bar -->
 <div class="top-actions-bar">
     <div class="filters-group">
@@ -356,6 +383,7 @@
             <button type="submit"><i class="fas fa-arrow-right"></i></button>
         </form>
         
+        <!-- Filter Buttons - CORREGIDOS -->
         <div class="filter-buttons">
             <a href="{% url 'empresa_list' %}" class="filter-btn {% if not tipo_filter %}active{% endif %}">Todos</a>
             <a href="?tipo=sociedad{% if search_query %}&search={{ search_query }}{% endif %}" class="filter-btn {% if tipo_filter == 'sociedad' %}active{% endif %}">Sociedades</a>
@@ -385,9 +413,15 @@
         </thead>
         <tbody>
             {% for empresa in empresas %}
-            <tr>
+            <tr {% if empresa_activa.id == empresa.id %}class="empresa-seleccionada"{% endif %}>
                 <td><span class="nit-code">{{ empresa.nit }}</span></td>
-                <td><strong>{{ empresa.razon_social }}</strong></td>
+                <td><strong>{{ empresa.razon_social }}</strong>
+                    {% if empresa_activa.id == empresa.id %}
+                        <span class="badge-gold" style="margin-left: 8px;">
+                            <i class="fas fa-check-circle"></i> Activa
+                        </span>
+                    {% endif %}
+                </td>
                 <td>{{ empresa.nombre_comercial|default:"-" }}</td>
                 <td>
                     {% if empresa.es_sociedad %}
@@ -404,21 +438,22 @@
                         <span class="badge-vigente"><i class="fas fa-check-circle"></i> {{ empresa.fecha_vencimiento|date:"d/m/Y" }}</span>
                     {% endif %}
                 </td>
-                
-                <!-- Dentro de la columna Acciones -->
                 <td>
                     <div class="action-buttons">
-                        <a href="{% url 'sucursal_list' empresa.id %}" class="btn-icon btn-sucursal" title="Sucursales">
-                            <i class="fa fa-store"></i>
+                        <a href="#" onclick="seleccionarEmpresa({{ empresa.id }}); return false;" class="btn-icon btn-select" title="Seleccionar Empresa">
+                            <i class="fas fa-check-circle"></i>
                         </a>
-                        <a href="{% url 'empresa_periodo_list' empresa.id %}" class="btn-icon btn-periodo" title="Periodos">
-                            <i class="fa fa-calendar-alt"></i>
+                        <a href="{% url 'sucursal_list' empresa.id %}" class="btn-icon btn-sucursal" title="Sucursales">
+                            <i class="fas fa-store"></i>
+                        </a>
+                        <a href="{% url 'empresa_periodo_list' empresa.id %}" class="btn-icon btn-periodo" title="Períodos">
+                            <i class="fas fa-calendar-alt"></i>
                         </a>
                         <a href="{% url 'empresa_edit' empresa.pk %}" class="btn-icon btn-edit" title="Editar">
-                            <i class="fa fa-edit"></i>
+                            <i class="fas fa-edit"></i>
                         </a>
                         <a href="{% url 'empresa_delete' empresa.pk %}" class="btn-icon btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar esta empresa?')">
-                            <i class="fa fa-trash-alt"></i>
+                            <i class="fas fa-trash-alt"></i>
                         </a>
                     </div>
                 </td>
@@ -461,4 +496,183 @@
     </div>
     {% endif %}
 </div>
+
+<script>
+    function seleccionarEmpresa(empresaId) {
+        const btn = event.target.closest('.btn-select');
+        const originalHtml = btn.innerHTML;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+        
+        // Usar la URL correcta con el namespace de administracion
+        const url = '/administracion/api/set-empresa-context/';
+        
+        fetch(url, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: 'empresa_id=' + empresaId
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error('Error en la respuesta del servidor: ' + response.status);
+            }
+            return response.json();
+        })
+        .then(data => {
+            console.log('Respuesta:', data); // Para depuración
+            if (data.success) {
+                if (data.periodo_activo) {
+                    mostrarMensaje('Empresa seleccionada correctamente', 'success');
+                    setTimeout(() => {
+                        location.reload();
+                    }, 1000);
+                } else if (data.tiene_periodos) {
+                    mostrarMensajeSeleccionPeriodo(empresaId, data.periodos);
+                    btn.innerHTML = originalHtml;
+                } else {
+                    mostrarMensaje('Esta empresa no tiene períodos asignados. Debe asignar un período primero.', 'danger');
+                    btn.innerHTML = originalHtml;
+                }
+            } else {
+                mostrarMensaje(data.error || 'Error al seleccionar la empresa', 'danger');
+                btn.innerHTML = originalHtml;
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error de conexión al servidor: ' + error.message, 'danger');
+            btn.innerHTML = originalHtml;
+        });
+    }
+
+    function activarPeriodoYEmpresa(empresaId) {
+        const periodoSelect = document.getElementById('periodo-selector-modal');
+        const periodoId = periodoSelect.value;
+        
+        if (!periodoId) {
+            mostrarMensaje('Debe seleccionar un período', 'danger');
+            return;
+        }
+        
+        // Primero activar el período
+        fetch('/administracion/api/set-periodo-context/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: 'periodo_id=' + periodoId
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                // Luego activar la empresa
+                return fetch('/administracion/api/set-empresa-context/', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-CSRFToken': getCookie('csrftoken')
+                    },
+                    body: 'empresa_id=' + empresaId
+                });
+            } else {
+                throw new Error(data.error || 'Error al activar período');
+            }
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                mostrarMensaje(data.error || 'Error al activar empresa', 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error al procesar la selección: ' + error.message, 'danger');
+        });
+    }
+
+    // Función para obtener el CSRF token
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    function mostrarMensaje(mensaje, tipo) {
+        const alertDiv = document.createElement('div');
+        alertDiv.className = `alert alert-${tipo} alert-dismissible fade show`;
+        alertDiv.role = 'alert';
+        alertDiv.innerHTML = `
+            <i class="fas ${tipo === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i>
+            ${mensaje}
+            <button type="button" class="btn-close" data-bs-dismiss="alert" aria-label="Close"></button>
+        `;
+        const container = document.querySelector('.scrollable-content');
+        container.insertBefore(alertDiv, container.firstChild);
+        
+        setTimeout(() => {
+            alertDiv.remove();
+        }, 3000);
+    }
+    
+    function mostrarMensajeSeleccionPeriodo(empresaId, periodos) {
+        let modalHtml = `
+            <div class="modal fade" id="periodoModal" tabindex="-1" aria-hidden="true">
+                <div class="modal-dialog">
+                    <div class="modal-content">
+                        <div class="modal-header" style="background: linear-gradient(135deg, var(--navy-light), var(--navy-medium)); color: white;">
+                            <h5 class="modal-title">
+                                <i class="fas fa-calendar-alt"></i> Seleccionar Período
+                            </h5>
+                            <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+                        </div>
+                        <div class="modal-body">
+                            <p>La empresa tiene períodos asignados, pero ninguno está activo.</p>
+                            <p>Por favor seleccione un período para activar:</p>
+                            <select id="periodo-selector-modal" class="form-control-custom" style="margin-top: 15px; width: 100%;">
+                                <option value="">Seleccione un período</option>
+        `;
+        
+        periodos.forEach(p => {
+            modalHtml += `<option value="${p.id}">${p.nombre}</option>`;
+        });
+        
+        modalHtml += `
+                            </select>
+                        </div>
+                        <div class="modal-footer">
+                            <button type="button" class="btn-cancel" data-bs-dismiss="modal">Cancelar</button>
+                            <button type="button" class="btn-submit" onclick="activarPeriodoYEmpresa(${empresaId})">Activar</button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        `;
+        
+        const existingModal = document.getElementById('periodoModal');
+        if (existingModal) {
+            existingModal.remove();
+        }
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        const modal = new bootstrap.Modal(document.getElementById('periodoModal'));
+        modal.show();
+    }
+    
+    
+    
+</script>
 {% endblock %}

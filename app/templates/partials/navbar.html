@@ -51,13 +51,14 @@
          <a href="{% url 'proveedor_list' %}" data-tooltip="Proveedores" data-submenu="proveedores" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-people"></i> <span>Proveedores</span>
         </a>
-        <a href="/contabilidad/listado-asientos/" data-tooltip="Listado de Asientos" data-submenu="listado_asientos" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <!--<a href="/contabilidad/listado-asientos/" data-tooltip="Listado de Asientos" data-submenu="listado_asientos" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-list-box"></i> <span>Listado de Asientos</span>
+        </a>-->
         </a>
-        <a href="/contabilidad/asientos-contables/" data-tooltip="Asientos Contables" data-submenu="asientos_contables" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <a href="{% url 'asiento_list' %}" data-tooltip="Asientos Contables" data-submenu="asientos_contables" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-book"></i> <span>Asientos Contables</span>
         </a>
-        <a href="/contabilidad/reporte-diario/" data-tooltip="Reporte Diario" data-submenu="reporte_diario" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+         <a href="{% url 'libro_diario' %}" data-tooltip="Libro Diario" data-submenu="libro_diario" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-pie"></i> <span>Reporte Diario</span>
         </a>
         <a href="/contabilidad/reporte-mayor/" data-tooltip="Reporte Mayor" data-submenu="reporte_mayor" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">

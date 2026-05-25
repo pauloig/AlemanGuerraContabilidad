@@ -613,3 +613,219 @@ class EmpresaPeriodo(models.Model):
                 pk=self.pk
             ).update(estatus=False)
         super().save(*args, **kwargs)
+        
+        
+
+
+class Asiento(models.Model):
+    """
+    Modelo para Asientos Contables
+    """
+    ESTATUS_CHOICES = [
+        (0, 'Borrador'),
+        (1, 'Finalizado'),
+    ]
+    
+    fecha = models.DateField(verbose_name="Fecha")
+    comentario = models.TextField(verbose_name="Comentario")
+    estatus = models.IntegerField(
+        verbose_name="Estatus",
+        choices=ESTATUS_CHOICES,
+        default=0
+    )
+    correlativo = models.IntegerField(
+        verbose_name="Correlativo",
+        null=True,
+        blank=True
+    )
+    anio = models.IntegerField(verbose_name="Año", null=True, blank=True)
+    mes = models.IntegerField(verbose_name="Mes", null=True, blank=True)
+    
+    id_empresa_periodo = models.ForeignKey(
+        'EmpresaPeriodo',
+        on_delete=models.PROTECT,
+        verbose_name="Período de Empresa",
+        related_name='asientos'
+    )
+    
+    # Auditoría
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='asientos_creados'
+    )
+    modificado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='asientos_modificados'
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_modificacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Asiento"
+        verbose_name_plural = "Asientos"
+        ordering = ['-fecha', '-correlativo']
+        unique_together = ['id_empresa_periodo', 'correlativo']
+    
+    def __str__(self):
+        return f"Asiento #{self.correlativo} - {self.fecha}"
+    
+    def get_total_debe(self):
+        return self.movimientos.filter(tipo_movimiento=1).aggregate(
+            total=models.Sum('monto')
+        )['total'] or 0
+    
+    def get_total_haber(self):
+        return self.movimientos.filter(tipo_movimiento=2).aggregate(
+            total=models.Sum('monto')
+        )['total'] or 0
+    
+    def is_balanced(self):
+        return self.get_total_debe() == self.get_total_haber()
+    
+    def puede_editar(self):
+        return self.estatus == 0
+
+
+class Movimiento(models.Model):
+    """
+    Modelo para Movimientos de Asientos
+    """
+    TIPO_CHOICES = [
+        (1, 'Debe'),
+        (2, 'Haber'),
+    ]
+    
+    monto = models.DecimalField(
+        verbose_name="Monto",
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(0.01)]
+    )
+    tipo_movimiento = models.IntegerField(
+        verbose_name="Tipo",
+        choices=TIPO_CHOICES
+    )
+    
+    id_asiento = models.ForeignKey(
+        'Asiento',
+        on_delete=models.CASCADE,
+        verbose_name="Asiento",
+        related_name='movimientos'
+    )
+    id_cuenta = models.ForeignKey(
+        'Cuenta',
+        on_delete=models.PROTECT,
+        verbose_name="Cuenta"
+    )
+    
+    # Auditoría
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_creados'
+    )
+    modificado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='movimientos_modificados'
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_modificacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Movimiento"
+        verbose_name_plural = "Movimientos"
+    
+    def __str__(self):
+        return f"{self.get_tipo_movimiento_display()} - {self.monto}"
+    
+    def get_total_detalles(self):
+        return self.detalles.aggregate(
+            total=models.Sum('monto')
+        )['total'] or 0
+    
+    def detalles_completos(self):
+        return self.get_total_detalles() == self.monto
+
+
+class DetalleMovimiento(models.Model):
+    """
+    Modelo para Detalle de Movimientos
+    """
+    nombre = models.CharField(
+        verbose_name="Nombre/Proveedor",
+        max_length=200
+    )
+    monto = models.DecimalField(
+        verbose_name="Monto",
+        max_digits=15,
+        decimal_places=2,
+        validators=[MinValueValidator(0.01)]
+    )
+    
+    id_movimiento = models.ForeignKey(
+        'Movimiento',
+        on_delete=models.CASCADE,
+        verbose_name="Movimiento",
+        related_name='detalles'
+    )
+    
+    # Auditoría
+    creado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='detalles_creados'
+    )
+    modificado_por = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name='detalles_modificados'
+    )
+    fecha_creacion = models.DateTimeField(auto_now_add=True)
+    fecha_modificacion = models.DateTimeField(auto_now=True)
+    
+    class Meta:
+        verbose_name = "Detalle de Movimiento"
+        verbose_name_plural = "Detalles de Movimientos"
+    
+    def __str__(self):
+        return f"{self.nombre} - {self.monto}"
+
+
+class CorrelativoAsiento(models.Model):
+    """
+    Modelo para control de correlativos por empresa y mes
+    """
+    id_empresa = models.ForeignKey(
+        'Empresa',
+        on_delete=models.CASCADE,
+        verbose_name="Empresa"
+    )
+    anio = models.IntegerField(verbose_name="Año")
+    mes = models.IntegerField(verbose_name="Mes")
+    ultimo_correlativo = models.IntegerField(
+        verbose_name="Último Correlativo",
+        default=0
+    )
+    
+    class Meta:
+        verbose_name = "Correlativo de Asiento"
+        verbose_name_plural = "Correlativos de Asientos"
+        unique_together = ['id_empresa', 'anio', 'mes']
+    
+    def __str__(self):
+        return f"{self.id_empresa.razon_social} - {self.mes}/{self.anio}"

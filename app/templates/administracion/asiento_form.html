@@ -1,0 +1,1356 @@
+{% extends 'base.html' %}
+{% load static %}
+
+{% block page_title_icon %}
+    {% if asiento %}
+        <i class="fas fa-edit"></i>
+    {% else %}
+        <i class="fas fa-plus-circle"></i>
+    {% endif %}
+{% endblock %}
+
+{% block page_title %}
+    {% if asiento %}
+        Editar Asiento #{{ asiento.correlativo }}
+    {% else %}
+        Nuevo Asiento Contable
+    {% endif %}
+{% endblock %}
+
+{% block content %}
+<style>
+    .form-container {
+        max-width: 100%;
+        margin: 0 auto;
+    }
+    
+    .form-card {
+        background: white;
+        border-radius: 20px;
+        padding: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    
+    .form-group {
+        margin-bottom: 20px;
+    }
+    
+    .form-group label {
+        display: block;
+        margin-bottom: 8px;
+        font-weight: 600;
+        color: var(--navy-dark);
+        font-size: 13px;
+    }
+    
+    .form-control-custom {
+        width: 100%;
+        padding: 10px 16px;
+        border: 2px solid #e2e8f0;
+        border-radius: 12px;
+        transition: all 0.3s;
+        font-size: 14px;
+    }
+    
+    .form-control-custom:focus {
+        border-color: var(--gold-primary);
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(197,160,40,0.1);
+    }
+    
+    .movimientos-table-container {
+        margin-top: 20px;
+        overflow-x: auto;
+    }
+    
+    .movimientos-table {
+        width: 100%;
+        border-collapse: collapse;
+    }
+    
+    .movimientos-table th {
+        text-align: left;
+        padding: 12px;
+        background: #f8fafc;
+        color: var(--navy-dark);
+        font-weight: 600;
+        font-size: 12px;
+        border-bottom: 2px solid #e2e8f0;
+    }
+    
+    .movimientos-table td {
+        padding: 10px 12px;
+        border-bottom: 1px solid #f1f5f9;
+        color: #334155;
+        font-size: 13px;
+        vertical-align: middle;
+    }
+    
+    .movimientos-table tbody tr:hover {
+        background: #f8fafc;
+    }
+    
+    .totales-row {
+        background: #f1f5f9;
+        font-weight: 700;
+    }
+    
+    .totales-row td {
+        padding: 12px;
+        border-top: 2px solid #e2e8f0;
+    }
+    
+    .debe-total {
+        color: #16a34a;
+    }
+    
+    .haber-total {
+        color: #dc2626;
+    }
+    
+    .btn-add-movimiento {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 8px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        font-size: 12px;
+        display: inline-flex;
+        align-items: center;
+        gap: 8px;
+        text-decoration: none;
+        transition: all 0.3s;
+        margin-top: 15px;
+    }
+    
+    .btn-add-movimiento:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
+        color: var(--navy-dark);
+    }
+    
+    .btn-icon-table {
+        width: 28px;
+        height: 28px;
+        border-radius: 6px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+        border: none;
+        background: transparent;
+        text-decoration: none;
+    }
+    
+    .btn-detail {
+        color: #3b82f6;
+    }
+    
+    .btn-detail:hover {
+        background: rgba(59,130,246,0.1);
+        transform: scale(1.05);
+    }
+    
+    .btn-delete-mov {
+        color: #dc2626;
+    }
+    
+    .btn-delete-mov:hover {
+        background: rgba(220,38,38,0.1);
+        transform: scale(1.05);
+    }
+    
+    .btn-submit {
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+    }
+    
+    .btn-cancel {
+        background: #e2e8f0;
+        color: var(--navy-dark);
+        border: none;
+        padding: 10px 20px;
+        border-radius: 10px;
+        font-weight: 600;
+        cursor: pointer;
+        transition: all 0.3s;
+        text-decoration: none;
+        display: inline-block;
+    }
+    
+    .btn-finalize {
+        background: #16a34a;
+        color: white;
+        border: none;
+        padding: 10px 24px;
+        border-radius: 12px;
+        font-weight: 600;
+        transition: all 0.3s;
+    }
+    
+    .btn-finalize:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+    }
+    
+    .form-actions {
+        display: flex;
+        justify-content: flex-end;
+        gap: 15px;
+        margin-top: 25px;
+    }
+    
+    .success-message {
+        background: #dcfce7;
+        border-left: 4px solid #16a34a;
+        padding: 12px 15px;
+        margin: 15px 0;
+        border-radius: 8px;
+    }
+    
+    .warning-message {
+        background: #fef2f2;
+        border-left: 4px solid #dc2626;
+        padding: 12px 15px;
+        margin: 15px 0;
+        border-radius: 8px;
+    }
+    
+    .toast-message {
+        position: fixed;
+        top: 80px;
+        right: 20px;
+        z-index: 9999;
+        padding: 12px 20px;
+        border-radius: 8px;
+        animation: slideIn 0.3s ease;
+    }
+    
+    @keyframes slideIn {
+        from {
+            transform: translateX(100%);
+            opacity: 0;
+        }
+        to {
+            transform: translateX(0);
+            opacity: 1;
+        }
+    }
+    
+    .alert-success {
+        background: #dcfce7;
+        color: #16a34a;
+        border: 1px solid #bbf7d0;
+    }
+    
+    .alert-danger {
+        background: #fee2e2;
+        color: #dc2626;
+        border: 1px solid #fecaca;
+    }
+    
+    .alert-warning {
+        background: #fef3c7;
+        color: #d97706;
+        border: 1px solid #fde68a;
+    }
+    
+    .progress-bar-container {
+        background: #e2e8f0;
+        border-radius: 10px;
+        height: 8px;
+        margin: 15px 0;
+    }
+    
+    .progress-bar-fill {
+        background: linear-gradient(90deg, var(--gold-primary), var(--gold-light));
+        border-radius: 10px;
+        height: 100%;
+        width: 0%;
+        transition: width 0.3s;
+    }
+    
+    .detail-item {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 8px 12px;
+        border-bottom: 1px solid #e2e8f0;
+    }
+    
+    .detail-item:last-child {
+        border-bottom: none;
+    }
+
+    /* Forzar altura del textarea de comentario */
+#id_comentario {
+    height: 60px !important;
+    min-height: 80px !important;
+    max-height: 100px !important;
+    resize: vertical;
+    overflow-y: auto;
+}
+
+</style>
+
+<div class="form-container">
+    <div class="form-card">
+        <div id="toastMessage" class="toast-message" style="display: none;"></div>
+        
+        {% if asiento and asiento.estatus == 1 %}
+        <div class="info-box">
+            <i class="fas fa-lock"></i>
+            <span>Este asiento está finalizado y no puede ser modificado.</span>
+        </div>
+        {% endif %}
+        
+        <!-- Formulario de Encabezado -->
+        <form id="asientoForm" method="POST">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="guardar_encabezado" id="formAction">
+            <input type="hidden" name="asiento_id" id="asientoIdHidden" value="{{ asiento.id|default:'' }}">
+            
+            <div class="row">
+                <div class="col-md-4">
+                    <div class="form-group">
+                        <label for="{{ form.fecha.id_for_label }}">
+                            Fecha <span style="color: #dc2626;">*</span>
+                        </label>
+                        {{ form.fecha }}
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="form-group">
+                        <label for="{{ form.comentario.id_for_label }}">
+                            Comentario <span style="color: #dc2626;">*</span>
+                        </label>
+                        {{ form.comentario }}
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    {% if not asiento or asiento.estatus == 0 %}
+                    <div class="form-actions" style="justify-content: flex-start;">
+                        <button type="submit" class="btn-submit" id="btnGuardarEncabezado">
+                            <i class="fas fa-save"></i> Guardar Cambios
+                        </button>
+                    </div>
+                    {% endif %}
+                </div>
+            </div>
+            
+            
+        </form>
+        
+        <!-- Movimientos -->
+        <div class="movimientos-table-container">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 15px;">
+                <h4 style="color: var(--navy-dark); margin: 0;">
+                    <i class="fas fa-exchange-alt"></i> Movimientos
+                </h4>
+                {% if not asiento or asiento.estatus == 0 %}
+                <button type="button" class="btn-add-movimiento" onclick="abrirModalMovimiento()" style="margin-top: 0;">
+                    <i class="fas fa-plus-circle"></i> Agregar Movimiento
+                </button>
+                {% endif %}
+            </div>
+            
+            <table class="movimientos-table" id="movimientosTable">
+                <thead>
+                    <tr>
+                        <th>Cuenta</th>
+                        <th>Detalle</th>
+                        <th style="text-align: right;">Debe</th>
+                        <th style="text-align: right;">Haber</th>
+                        <th style="text-align: center;">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="movimientosBody">
+                    {% for movimiento in movimientos %}
+                    <tr data-id="{{ movimiento.id }}" data-monto="{{ movimiento.monto }}" data-tipo="{{ movimiento.tipo_movimiento }}">
+                        <td>{{ movimiento.id_cuenta.nombre }}</td>
+                        <td>
+                            {% if movimiento.total_detalles > 0 %}
+                            <span class="badge-gold" style="font-size: 10px;">
+                                <i class="fas fa-receipt"></i> {{ movimiento.total_detalles|floatformat:2 }}/{{ movimiento.monto|floatformat:2 }}
+                            </span>
+                            {% else %}
+                            <span class="text-muted">Sin detalles</span>
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">
+                            {% if movimiento.tipo_movimiento == 1 %}
+                                Q {{ movimiento.monto|floatformat:2 }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td style="text-align: right;">
+                            {% if movimiento.tipo_movimiento == 2 %}
+                                Q {{ movimiento.monto|floatformat:2 }}
+                            {% else %}
+                                -
+                            {% endif %}
+                        </td>
+                        <td style="text-align: center;">
+                            <div class="action-buttons" style="justify-content: center;">
+                                <button class="btn-icon-table btn-detail" onclick="abrirModalDetalle({{ movimiento.id }})" title="Detalles">
+                                    <i class="fas fa-receipt"></i>
+                                </button>
+                                {% if not asiento or asiento.estatus == 0 %}
+                                <button class="btn-icon-table btn-delete-mov" onclick="eliminarMovimiento({{ movimiento.id }})" title="Eliminar">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                                {% endif %}
+                            </div>
+                        </td>
+                    </tr>
+                    {% empty %}
+                    <tr id="noMovimientosRow">
+                        <td colspan="5" style="text-align: center; padding: 40px;">
+                            <i class="fas fa-exchange-alt" style="font-size: 48px; color: #cbd5e1; margin-bottom: 15px; display: block;"></i>
+                            <p>No hay movimientos registrados</p>
+                            <p style="font-size: 12px;">Agregue movimientos para completar el asiento</p>
+                        </td>
+                    </tr>
+                    {% endfor %}
+                </tbody>
+                <tfoot>
+                    <tr class="totales-row">
+                        <td colspan="2"><strong>TOTALES</strong></td>
+                        <td style="text-align: right;" id="totalDebeDisplay">
+                            <strong class="debe-total">Q {{ total_debe|floatformat:2 }}</strong>
+                        </td>
+                        <td style="text-align: right;" id="totalHaberDisplay">
+                            <strong class="haber-total">Q {{ total_haber|floatformat:2 }}</strong>
+                        </td>
+                        <td>                           <td style="text-align: center;"></td>
+                        </tr>
+                    </tr>
+                </tfoot>
+            </table>
+        </div>
+        
+        <!-- Mensaje de balance -->
+        <div id="balanceMessage">
+            {% if is_balanced %}
+            <div class="success-message">
+                <i class="fas fa-check-circle"></i> <strong>✓ Balance correcto</strong> - El total Debe es igual al total Haber.
+            </div>
+            {% else %}
+            <div class="warning-message">
+                <i class="fas fa-exclamation-triangle"></i> <strong>⚠️ Desbalanceado</strong> - El total Debe (Q {{ total_debe|floatformat:2 }}) no es igual al total Haber (Q {{ total_haber|floatformat:2 }}).
+            </div>
+            {% endif %}
+        </div>
+        
+        <!-- Botones de acción -->
+        <div class="form-actions">
+            <a href="{% url 'asiento_list' %}" class="btn-cancel">
+                <i class="fas fa-times"></i> Cancelar
+            </a>
+            {% if not asiento or asiento.estatus == 0 %}
+                {% if is_balanced and movimientos %}
+                <form id="finalizeForm" method="POST" style="display: inline;">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="finalizar">
+                    <input type="hidden" name="asiento_id" value="{{ asiento.id|default:'' }}">
+                    <button type="submit" class="btn-finalize" id="btnFinalizar">
+                        <i class="fas fa-check-circle"></i> Finalizar Asiento
+                    </button>
+                </form>
+                {% else %}
+                <button class="btn-finalize" disabled id="btnFinalizarDisabled">
+                    <i class="fas fa-check-circle"></i> Finalizar Asiento
+                </button>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Movimiento -->
+<div class="modal fade" id="movimientoModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--navy-light), var(--navy-medium));">
+                <h5 class="modal-title" style="color: white;"><i class="fas fa-exchange-alt"></i> Nuevo Movimiento</h5>
+                <button type="button" class="btn-close btn-close-white close" data-dismiss="modal" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <form id="movimientoForm">
+                    {% csrf_token %}
+                    <input type="hidden" id="movimientoAsientoId" name="asiento_id" value="{{ asiento.id|default:'' }}">
+                    
+                    <div class="form-group">
+                        <label>Grupo <span style="color: #dc2626;">*</span></label>
+                        <select id="movimientoGrupo" class="form-control-custom ignore" required>
+                            <option value="">Seleccione un grupo</option>
+                            {% for grupo in grupos %}
+                            <option value="{{ grupo.id }}">{{ grupo.nombre }}</option>
+                            {% endfor %}
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>SubGrupo <span style="color: #dc2626;">*</span></label>
+                        <select id="movimientoSubGrupo" class="form-control-custom ignore" required>
+                            <option value="">Primero seleccione un grupo</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Cuenta <span style="color: #dc2626;">*</span></label>
+                        <select id="movimientoCuenta" class="form-control-custom ignore" required>
+                            <option value="">Primero seleccione un subgrupo</option>
+                        </select>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Monto <span style="color: #dc2626;">*</span></label>
+                        <input type="number" id="movimientoMonto" class="form-control-custom" step="0.01" min="0.01" required>
+                    </div>
+                    
+                    <div class="form-group">
+                        <label>Tipo <span style="color: #dc2626;">*</span></label>
+                        <select id="movimientoTipo" class="form-control-custom ignore" required>
+                            <option value="">Seleccione un tipo</option>
+                            <option value="1">Debe</option>
+                            <option value="2">Haber</option>
+                        </select>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-submit" onclick="guardarMovimiento()">Guardar Movimiento</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Modal para Detalles -->
+<div class="modal fade" id="detalleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--navy-light), var(--navy-medium));">
+                <h5 class="modal-title" style="color: white;"><i class="fas fa-receipt"></i> Detalles del Movimiento</h5>
+                <button type="button" class="btn-close btn-close-white close" data-dismiss="modal" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <div id="detalleInfo">
+                    <p><strong>Cuenta:</strong> <span id="detalleCuentaNombre"></span></p>
+                    <p><strong>Monto total:</strong> Q <span id="detalleMontoTotal"></span></p>
+                    <div class="progress-bar-container">
+                        <div class="progress-bar-fill" id="detalleProgress"></div>
+                    </div>
+                    <p><strong>Total detalles:</strong> Q <span id="detalleTotalDetalles"></span></p>
+                </div>
+                
+                <hr>
+                
+                <div class="form-group">
+                    <label>Agregar Detalle</label>
+                    <div class="row">
+                        <div class="col-md-6">
+                            <select id="detalleProveedor" class="form-control-custom" style="margin-bottom: 10px;">
+                                <option value="">Seleccionar Proveedor</option>
+                                {% for proveedor in proveedores %}
+                                <option value="{{ proveedor.nombre }}">{{ proveedor.nombre }}</option>
+                                {% endfor %}
+                                <option value="__otro__">Otro (ingresar texto)</option>
+                            </select>
+                            <input type="text" id="detalleNombre" class="form-control-custom" placeholder="O ingrese un nombre" style="display: none;">
+                        </div>
+                        <div class="col-md-4">
+                            <input type="number" id="detalleMonto" class="form-control-custom" step="0.01" min="0.01" placeholder="Monto">
+                        </div>
+                        <div class="col-md-2">
+                            <button type="button" class="btn-submit" onclick="agregarDetalle()" style="width: 100%;">Agregar</button>
+                        </div>
+                    </div>
+                </div>
+                
+                <hr>
+                
+                <h6>Listado de Detalles</h6>
+                <div id="detallesList" style="max-height: 300px; overflow-y: auto;">
+                    <p class="text-muted text-center">No hay detalles registrados</p>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" data-dismiss="modal">Cerrar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let movimientoIdActual = null;
+    let movimientoMontoActual = 0;
+    
+    // Datos de subgrupos y cuentas desde el servidor
+    let subgruposData = [];
+    let cuentasData = [];
+    
+    try {
+        subgruposData = {{ subgrupos_json|safe }};
+        cuentasData = {{ cuentas_json|safe }};
+        
+        console.log("=== DEBUG - Datos cargados ===");
+        console.log("subgruposData:", subgruposData);
+        console.log("subgruposData length:", subgruposData.length);
+        console.log("cuentasData:", cuentasData);
+        console.log("cuentasData length:", cuentasData.length);
+        
+        if (subgruposData.length > 0) {
+            console.log("Primer subgrupo:", subgruposData[0]);
+        }
+        if (cuentasData.length > 0) {
+            console.log("Primera cuenta:", cuentasData[0]);
+        }
+    } catch(e) {
+        console.error("Error cargando datos:", e);
+    }
+    
+    function mostrarMensaje(mensaje, tipo) {
+        const toast = document.getElementById('toastMessage');
+        toast.className = `toast-message alert alert-${tipo}`;
+        toast.innerHTML = `<i class="fas ${tipo === 'success' ? 'fa-check-circle' : 'fa-exclamation-triangle'}"></i> ${mensaje}`;
+        toast.style.display = 'block';
+        setTimeout(() => {
+            toast.style.display = 'none';
+        }, 3000);
+    }
+    
+    function getCookie(name) {
+        let cookieValue = null;
+        if (document.cookie && document.cookie !== '') {
+            const cookies = document.cookie.split(';');
+            for (let i = 0; i < cookies.length; i++) {
+                const cookie = cookies[i].trim();
+                if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                    cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                    break;
+                }
+            }
+        }
+        return cookieValue;
+    }
+    
+    function actualizarTotales() {
+        let totalDebe = 0;
+        let totalHaber = 0;
+
+        document.querySelectorAll('#movimientosBody tr[data-id]').forEach(row => {
+            const tipo = parseInt(row.getAttribute('data-tipo'));
+            const monto = parseFloat(row.getAttribute('data-monto')) || 0;
+
+            if (tipo === 1) totalDebe += monto;
+            else if (tipo === 2) totalHaber += monto;
+        });
+
+        document.getElementById('totalDebeDisplay').innerHTML = `<strong class="debe-total">Q ${totalDebe.toFixed(2)}</strong>`;
+        document.getElementById('totalHaberDisplay').innerHTML = `<strong class="haber-total">Q ${totalHaber.toFixed(2)}</strong>`;
+
+        const balanceDiv = document.getElementById('balanceMessage');
+        const btnFinalizar = document.getElementById('btnFinalizar');
+        const btnFinalizarDisabled = document.getElementById('btnFinalizarDisabled');
+
+        if (totalDebe === totalHaber && totalDebe > 0) {
+            balanceDiv.innerHTML = `
+                <div class="success-message">
+                    <i class="fas fa-check-circle"></i> <strong>✓ Balance correcto</strong> - El total Debe es igual al total Haber.
+                </div>
+            `;
+
+            // Si ya existe el botón activo, habilítalo
+            if (btnFinalizar) {
+                btnFinalizar.disabled = false;
+                return;
+            }
+
+            // Si solo existe el botón deshabilitado (placeholder), lo reemplazamos por el formulario real
+            if (btnFinalizarDisabled) {
+                const csrf = document.querySelector('input[name="csrfmiddlewaretoken"]')?.value || '';
+                const asientoId = document.getElementById('asientoIdHidden')?.value || '';
+
+                const form = document.createElement('form');
+                form.id = 'finalizeForm';
+                form.method = 'POST';
+                form.style.display = 'inline';
+                form.innerHTML = `
+                    <input type="hidden" name="csrfmiddlewaretoken" value="${csrf}">
+                    <input type="hidden" name="action" value="finalizar">
+                    <input type="hidden" name="asiento_id" value="${asientoId}">
+                    <button type="submit" class="btn-finalize" id="btnFinalizar">
+                        <i class="fas fa-check-circle"></i> Finalizar Asiento
+                    </button>
+                `;
+
+                btnFinalizarDisabled.parentNode.replaceChild(form, btnFinalizarDisabled);
+
+                // Añadimos el handler de submit (mismo comportamiento que el original)
+                form.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const finalizeBtn = document.getElementById('btnFinalizar');
+                    if (finalizeBtn) {
+                        finalizeBtn.disabled = true;
+                        finalizeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizando...';
+                    }
+                    const formData = new FormData(this);
+                    fetch(window.location.href, {
+                        method: 'POST',
+                        headers: {
+                            'X-CSRFToken': getCookie('csrftoken'),
+                            'X-Requested-With': 'XMLHttpRequest'
+                        },
+                        body: formData
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.success && data.redirect) {
+                            mostrarMensaje('Asiento finalizado correctamente', 'success');
+                            setTimeout(() => { window.location.href = data.redirect; }, 1000);
+                        } else if (!data.success) {
+                            mostrarMensaje(data.error || 'Error al finalizar el asiento', 'danger');
+                            if (finalizeBtn) {
+                                finalizeBtn.disabled = false;
+                                finalizeBtn.innerHTML = '<i class="fas fa-check-circle"></i> Finalizar Asiento';
+                            }
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        mostrarMensaje('Error de conexión', 'danger');
+                        if (finalizeBtn) {
+                            finalizeBtn.disabled = false;
+                            finalizeBtn.innerHTML = '<i class="fas fa-check-circle"></i> Finalizar Asiento';
+                        }
+                    });
+                });
+            }
+
+        } else {
+            balanceDiv.innerHTML = `
+                <div class="warning-message">
+                    <i class="fas fa-exclamation-triangle"></i> <strong>⚠️ Desbalanceado</strong> - El total Debe (Q ${totalDebe.toFixed(2)}) no es igual al total Haber (Q ${totalHaber.toFixed(2)}).
+                </div>
+            `;
+            if (btnFinalizar) btnFinalizar.disabled = true;
+        }
+    }
+    
+    // ==================== FUNCIONES PARA SELECTORES JERÁRQUICOS CON AJAX ====================
+    
+    function cargarSubgrupos() {
+        const grupoId = document.getElementById('movimientoGrupo').value;
+        const subgrupoSelect = document.getElementById('movimientoSubGrupo');
+        const cuentaSelect = document.getElementById('movimientoCuenta');
+        
+        console.log("=== Cargando subgrupos vía AJAX ===");
+        console.log("Grupo ID:", grupoId);
+        
+        // Resetear selects dependientes
+        subgrupoSelect.innerHTML = '<option value="">Cargando subgrupos...</option>';
+        subgrupoSelect.disabled = false;
+        cuentaSelect.innerHTML = '<option value="">Primero seleccione un subgrupo</option>';
+        cuentaSelect.disabled = false;
+        
+        if (!grupoId || grupoId === '') {
+            subgrupoSelect.innerHTML = '<option value="">Seleccione un grupo primero</option>';
+            return;
+        }
+        
+        // Llamada AJAX
+        fetch(`/administracion/api/subgrupos-por-grupo/${grupoId}/`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Respuesta API subgrupos:", data);
+                
+                subgrupoSelect.innerHTML = '<option value="">Seleccione un subgrupo</option>';
+                
+                if (data.success && data.subgrupos && data.subgrupos.length > 0) {
+                    data.subgrupos.forEach(sg => {
+                        const option = document.createElement('option');
+                        option.value = sg.id;
+                        option.textContent = sg.nombre;
+                        subgrupoSelect.appendChild(option);
+                    });
+                    subgrupoSelect.disabled = false;
+                    console.log(`${data.subgrupos.length} subgrupos cargados`);
+                } else {
+                    subgrupoSelect.innerHTML = '<option value="">No hay subgrupos para este grupo</option>';
+                    subgrupoSelect.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error("Error al cargar subgrupos:", error);
+                subgrupoSelect.innerHTML = '<option value="">Error al cargar subgrupos</option>';
+                subgrupoSelect.disabled = false;
+            });
+    }
+    
+    function cargarCuentas() {
+        const subgrupoId = document.getElementById('movimientoSubGrupo').value;
+        const cuentaSelect = document.getElementById('movimientoCuenta');
+        
+        console.log("=== Cargando cuentas vía AJAX ===");
+        console.log("Subgrupo ID:", subgrupoId);
+        
+        cuentaSelect.innerHTML = '<option value="">Cargando cuentas...</option>';
+        cuentaSelect.disabled = false;
+        
+        if (!subgrupoId || subgrupoId === '') {
+            cuentaSelect.innerHTML = '<option value="">Seleccione un subgrupo primero</option>';
+            cuentaSelect.disabled = false;
+            return;
+        }
+        
+        // Llamada AJAX
+        fetch(`/administracion/api/cuentas-por-subgrupo/${subgrupoId}/`)
+            .then(response => response.json())
+            .then(data => {
+                console.log("Respuesta API cuentas:", data);
+                
+                cuentaSelect.innerHTML = '<option value="">Seleccione una cuenta</option>';
+                
+                if (data.success && data.cuentas && data.cuentas.length > 0) {
+                    data.cuentas.forEach(cuenta => {
+                        const option = document.createElement('option');
+                        option.value = cuenta.id;
+                        option.textContent = cuenta.nombre;
+                        cuentaSelect.appendChild(option);
+                    });
+                    cuentaSelect.disabled = false;
+                    console.log(`${data.cuentas.length} cuentas cargadas`);
+                } else {
+                    cuentaSelect.innerHTML = '<option value="">No hay cuentas para este subgrupo</option>';
+                    cuentaSelect.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error("Error al cargar cuentas:", error);
+                cuentaSelect.innerHTML = '<option value="">Error al cargar cuentas</option>';
+                cuentaSelect.disabled = false;
+            });
+    }
+    
+    // ==================== INICIALIZACIÓN DE SELECTORES DEL MODAL ====================
+    
+    function inicializarSelectoresModal() {
+        console.log("=== Inicializando selectores del modal ===");
+        
+        const grupoSelect = document.getElementById('movimientoGrupo');
+        const subgrupoSelect = document.getElementById('movimientoSubGrupo');
+        
+        if (grupoSelect && !grupoSelect.dataset.listenerAttached) {
+            grupoSelect.addEventListener('change', function() {
+                console.log("🎯 Grupo cambiado - Nuevo valor:", this.value);
+                cargarSubgrupos();
+            });
+            grupoSelect.dataset.listenerAttached = 'true';
+            console.log("Listener agregado a grupoSelect");
+        }
+        
+        if (subgrupoSelect && !subgrupoSelect.dataset.listenerAttached) {
+            subgrupoSelect.addEventListener('change', function() {
+                console.log("🎯 Subgrupo cambiado - Nuevo valor:", this.value);
+                cargarCuentas();
+            });
+            subgrupoSelect.dataset.listenerAttached = 'true';
+            console.log("Listener agregado a subgrupoSelect");
+        }
+    }
+    
+    // ==================== MANEJO DE FORMULARIOS ====================
+    
+    // Manejar el envío del formulario de encabezado
+    document.getElementById('asientoForm')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const submitBtn = document.getElementById('btnGuardarEncabezado');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Guardando...';
+        }
+        
+        const formData = new FormData(this);
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                mostrarMensaje('Asiento guardado correctamente', 'success');
+                if (data.redirect) {
+                    setTimeout(() => {
+                        window.location.href = data.redirect;
+                    }, 1000);
+                } else if (data.asiento_id) {
+                    document.getElementById('asientoIdHidden').value = data.asiento_id;
+                    document.getElementById('movimientoAsientoId').value = data.asiento_id;
+                    mostrarMensaje('Asiento creado. Ahora puede agregar movimientos.', 'success');
+                } else {
+                    location.reload();
+                }
+            } else {
+                mostrarMensaje(data.errors ? Object.values(data.errors).join('\n') : (data.error || 'Error al guardar'), 'danger');
+                if (submitBtn) {
+                    submitBtn.disabled = false;
+                    submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Cambios';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error de conexión', 'danger');
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerHTML = '<i class="fas fa-save"></i> Guardar Cambios';
+            }
+        });
+    });
+    
+    // Manejar el envío del formulario de finalización
+    document.getElementById('finalizeForm')?.addEventListener('submit', function(e) {
+        e.preventDefault();
+        
+        const finalizeBtn = document.getElementById('btnFinalizar');
+        if (finalizeBtn) {
+            finalizeBtn.disabled = true;
+            finalizeBtn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Finalizando...';
+        }
+        
+        const formData = new FormData(this);
+        
+        fetch(window.location.href, {
+            method: 'POST',
+            headers: {
+                'X-CSRFToken': getCookie('csrftoken'),
+                'X-Requested-With': 'XMLHttpRequest'
+            },
+            body: formData
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success && data.redirect) {
+                mostrarMensaje('Asiento finalizado correctamente', 'success');
+                setTimeout(() => {
+                    window.location.href = data.redirect;
+                }, 1000);
+            } else if (!data.success) {
+                mostrarMensaje(data.error || 'Error al finalizar el asiento', 'danger');
+                if (finalizeBtn) {
+                    finalizeBtn.disabled = false;
+                    finalizeBtn.innerHTML = '<i class="fas fa-check-circle"></i> Finalizar Asiento';
+                }
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error de conexión', 'danger');
+            if (finalizeBtn) {
+                finalizeBtn.disabled = false;
+                finalizeBtn.innerHTML = '<i class="fas fa-check-circle"></i> Finalizar Asiento';
+            }
+        });
+    });
+    
+    // ==================== FUNCIONES DEL MODAL ====================
+    
+    function abrirModalMovimiento() {
+        const asientoId = document.getElementById('asientoIdHidden').value;
+        if (!asientoId || asientoId === '') {
+            mostrarMensaje('Primero debe guardar el encabezado del asiento', 'warning');
+            return;
+        }
+        
+        console.log("=== Abriendo modal de movimiento ===");
+        
+        // Resetear selects
+        const grupoSelect = document.getElementById('movimientoGrupo');
+        const subgrupoSelect = document.getElementById('movimientoSubGrupo');
+        const cuentaSelect = document.getElementById('movimientoCuenta');
+        
+        if (grupoSelect) grupoSelect.value = '';
+        if (subgrupoSelect) {
+            subgrupoSelect.innerHTML = '<option value="">Primero seleccione un grupo</option>';
+            subgrupoSelect.disabled = false;
+        }
+        if (cuentaSelect) {
+            cuentaSelect.innerHTML = '<option value="">Primero seleccione un subgrupo</option>';
+            cuentaSelect.disabled = false;
+        }
+        
+        document.getElementById('movimientoMonto').value = '';
+        document.getElementById('movimientoTipo').value = '';
+        
+        $('#movimientoModal').modal('show');
+    }
+    
+    function guardarMovimiento() {
+        const asientoId = document.getElementById('asientoIdHidden').value;
+        if (!asientoId || asientoId === '') {
+            mostrarMensaje('Primero debe guardar el encabezado del asiento', 'warning');
+            return;
+        }
+        
+        const cuentaId = document.getElementById('movimientoCuenta').value;
+        const monto = document.getElementById('movimientoMonto').value;
+        const tipo = document.getElementById('movimientoTipo').value;
+        
+        if (!cuentaId || !monto || !tipo) {
+            mostrarMensaje('Complete todos los campos', 'warning');
+            return;
+        }
+        
+        const cuentaSelect = document.getElementById('movimientoCuenta');
+        const cuentaNombre = cuentaSelect.options[cuentaSelect.selectedIndex]?.text || '';
+        
+        fetch('/administracion/api/movimiento/crear/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: `asiento_id=${asientoId}&id_cuenta=${cuentaId}&monto=${monto}&tipo_movimiento=${tipo}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const tbody = document.getElementById('movimientosBody');
+                const noRow = document.getElementById('noMovimientosRow');
+                if (noRow) noRow.remove();
+                
+                const newRow = document.createElement('tr');
+                newRow.setAttribute('data-id', data.movimiento.id);
+                newRow.setAttribute('data-monto', data.movimiento.monto);
+                newRow.setAttribute('data-tipo', data.movimiento.tipo);
+                newRow.innerHTML = `
+                    <td>${data.movimiento.cuenta_nombre}</td>
+                    <td><span class="text-muted">Sin detalles</span></td>
+                    <td style="text-align: right;">${data.movimiento.tipo === 1 ? `Q ${data.movimiento.monto.toFixed(2)}` : '-'}</td>
+                    <td style="text-align: right;">${data.movimiento.tipo === 2 ? `Q ${data.movimiento.monto.toFixed(2)}` : '-'}</td>
+                    <td style="text-align: center;">
+                        <div class="action-buttons" style="justify-content: center;">
+                            <button class="btn-icon-table btn-detail" onclick="abrirModalDetalle(${data.movimiento.id})" title="Detalles">
+                                <i class="fas fa-receipt"></i>
+                            </button>
+                            <button class="btn-icon-table btn-delete-mov" onclick="eliminarMovimiento(${data.movimiento.id})" title="Eliminar">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        </div>
+                    </td>
+                `;
+                tbody.appendChild(newRow);
+                
+                actualizarTotales();
+                mostrarMensaje('Movimiento agregado correctamente', 'success');
+                
+                // Cerrar modal usando jQuery (más confiable)
+                if (typeof $ !== 'undefined') {
+                    $('#movimientoModal').modal('hide');
+                } else {
+                    // Fallback con Bootstrap nativo
+                    const modalElement = document.getElementById('movimientoModal');
+                    if (modalElement) {
+                        // Usar data-bs-dismiss si existe
+                        const closeButton = modalElement.querySelector('[data-bs-dismiss="modal"]');
+                        if (closeButton) {
+                            closeButton.click();
+                        } else {
+                            // Forzar cierre
+                            modalElement.classList.remove('show');
+                            modalElement.style.display = 'none';
+                            document.body.classList.remove('modal-open');
+                            const backdrop = document.querySelector('.modal-backdrop');
+                            if (backdrop) backdrop.remove();
+                        }
+                    }
+                }
+            } else {
+                mostrarMensaje(data.errors ? Object.values(data.errors).join('\n') : (data.error || 'Error al guardar'), 'danger');
+            }
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            mostrarMensaje('Error de conexión', 'danger');
+        });
+    }
+    
+    function eliminarMovimiento(movimientoId) {
+        if (!confirm('¿Eliminar este movimiento?')) return;
+        
+        fetch('/administracion/api/movimiento/eliminar/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: `movimiento_id=${movimientoId}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                const row = document.querySelector(`#movimientosBody tr[data-id="${movimientoId}"]`);
+                if (row) row.remove();
+                
+                if (document.querySelectorAll('#movimientosBody tr').length === 0) {
+                    document.getElementById('movimientosBody').innerHTML = `
+                        <tr id="noMovimientosRow">
+                            <td colspan="5" style="text-align: center; padding: 40px;">
+                                <i class="fas fa-exchange-alt" style="font-size: 48px; color: #cbd5e1; margin-bottom: 15px; display: block;"></i>
+                                <p>No hay movimientos registrados</p>
+                                <p style="font-size: 12px;">Agregue movimientos para completar el asiento</p>
+                            </td>
+                        </table>
+                    `;
+                }
+                
+                actualizarTotales();
+                mostrarMensaje('Movimiento eliminado correctamente', 'success');
+            } else {
+                mostrarMensaje(data.error, 'danger');
+            }
+        });
+    }
+    
+    // ==================== FUNCIONES PARA DETALLES ====================
+    
+    function abrirModalDetalle(movimientoId) {
+        movimientoIdActual = movimientoId;
+        
+        fetch(`/administracion/api/detalle/listar/${movimientoId}/`)
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                movimientoMontoActual = data.monto_movimiento;
+                document.getElementById('detalleCuentaNombre').innerText = 
+                    document.querySelector(`#movimientosBody tr[data-id="${movimientoId}"] td:first-child`).innerText;
+                document.getElementById('detalleMontoTotal').innerText = data.monto_movimiento.toFixed(2);
+                document.getElementById('detalleTotalDetalles').innerText = data.total_detalles.toFixed(2);
+                
+                const porcentaje = (data.total_detalles / data.monto_movimiento) * 100;
+                document.getElementById('detalleProgress').style.width = `${Math.min(porcentaje, 100)}%`;
+                
+                const detallesList = document.getElementById('detallesList');
+                if (data.detalles.length === 0) {
+                    detallesList.innerHTML = '<p class="text-muted text-center">No hay detalles registrados</p>';
+                } else {
+                    detallesList.innerHTML = '';
+                    data.detalles.forEach(detalle => {
+                        const div = document.createElement('div');
+                        div.className = 'detail-item';
+                        div.innerHTML = `
+                            <span><strong>${detalle.nombre}</strong></span>
+                            <span>Q ${detalle.monto.toFixed(2)}</span>
+                            <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})">
+                                <i class="fas fa-trash-alt"></i>
+                            </button>
+                        `;
+                        detallesList.appendChild(div);
+                    });
+                }
+                
+                $('#detalleModal').modal('show');
+            }
+        });
+    }
+    
+    function agregarDetalle() {
+        let nombre = document.getElementById('detalleProveedor').value;
+        const otroInput = document.getElementById('detalleNombre');
+        
+        if (nombre === '__otro__') {
+            nombre = otroInput.value;
+            if (!nombre) {
+                mostrarMensaje('Ingrese un nombre', 'warning');
+                return;
+            }
+        } else if (!nombre) {
+            nombre = otroInput.value;
+            if (!nombre) {
+                mostrarMensaje('Seleccione un proveedor o ingrese un nombre', 'warning');
+                return;
+            }
+        }
+        
+        const monto = parseFloat(document.getElementById('detalleMonto').value);
+        if (!monto || monto <= 0) {
+            mostrarMensaje('Ingrese un monto válido', 'warning');
+            return;
+        }
+        
+        fetch('/administracion/api/detalle/crear/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: `movimiento_id=${movimientoIdActual}&nombre=${encodeURIComponent(nombre)}&monto=${monto}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                document.getElementById('detalleTotalDetalles').innerText = data.total_detalles.toFixed(2);
+                const porcentaje = (data.total_detalles / data.monto_movimiento) * 100;
+                document.getElementById('detalleProgress').style.width = `${Math.min(porcentaje, 100)}%`;
+                
+                const detallesList = document.getElementById('detallesList');
+                const newDetail = document.createElement('div');
+                newDetail.className = 'detail-item';
+                newDetail.innerHTML = `
+                    <span><strong>${data.detalle.nombre}</strong></span>
+                    <span>Q ${data.detalle.monto.toFixed(2)}</span>
+                    <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${data.detalle.id})">
+                        <i class="fas fa-trash-alt"></i>
+                    </button>
+                `;
+                
+                if (detallesList.children[0] && detallesList.children[0].classList.contains('text-muted')) {
+                    detallesList.innerHTML = '';
+                }
+                detallesList.appendChild(newDetail);
+                
+                document.getElementById('detalleProveedor').value = '';
+                document.getElementById('detalleNombre').value = '';
+                document.getElementById('detalleNombre').style.display = 'none';
+                document.getElementById('detalleMonto').value = '';
+                
+                if (data.detalles_completos) {
+                    const row = document.querySelector(`#movimientosBody tr[data-id="${movimientoIdActual}"]`);
+                    if (row) {
+                        const detalleCell = row.cells[1];
+                        detalleCell.innerHTML = `<span class="badge-gold" style="font-size: 10px;">
+                            <i class="fas fa-receipt"></i> ${data.total_detalles.toFixed(2)}/${data.monto_movimiento.toFixed(2)}
+                        </span>`;
+                    }
+                }
+                
+                mostrarMensaje('Detalle agregado correctamente', 'success');
+            } else {
+                mostrarMensaje(data.errors ? Object.values(data.errors).join('\n') : (data.error || 'Error al guardar'), 'danger');
+            }
+        });
+    }
+    
+    function eliminarDetalle(detalleId) {
+        fetch('/administracion/api/detalle/eliminar/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: `detalle_id=${detalleId}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                location.reload();
+            } else {
+                mostrarMensaje(data.error, 'danger');
+            }
+        });
+    }
+    
+    // ==================== EVENTOS DE DOM ====================
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        console.log("=== DOM cargado ===");
+        inicializarSelectoresModal();
+        
+        const proveedorSelect = document.getElementById('detalleProveedor');
+        const otroInput = document.getElementById('detalleNombre');
+        
+        if (proveedorSelect) {
+            proveedorSelect.addEventListener('change', function() {
+                if (this.value === '__otro__') {
+                    if (otroInput) {
+                        otroInput.style.display = 'block';
+                        otroInput.required = true;
+                    }
+                } else {
+                    if (otroInput) {
+                        otroInput.style.display = 'none';
+                        otroInput.required = false;
+                        otroInput.value = '';
+                    }
+                }
+            });
+        }
+
+        document.addEventListener('change', function(event) {
+            const target = event.target;
+            if (!target) return;
+
+            if (target.id === 'movimientoGrupo') {
+                console.log('🎯 Delegated change detected on movimientoGrupo:', target.value);
+                cargarSubgrupos();
+            }
+
+            if (target.id === 'movimientoSubGrupo') {
+                console.log('🎯 Delegated change detected on movimientoSubGrupo:', target.value);
+                cargarCuentas();
+            }
+        });
+        
+        // Evento cuando el modal de movimiento se abre
+        const movimientoModal = document.getElementById('movimientoModal');
+        if (movimientoModal) {
+            movimientoModal.addEventListener('shown.bs.modal', function() {
+                console.log("=== Modal de movimiento abierto ===");
+            });
+        }
+    });
+    
+    // Bloquear campos si el asiento está finalizado
+    {% if asiento and asiento.estatus == 1 %}
+    document.addEventListener('DOMContentLoaded', function() {
+        document.querySelectorAll('input, select, textarea, button').forEach(el => {
+            if (el.type !== 'button' && el.id !== 'logoutForm' && !el.classList.contains('btn-cancel')) {
+                if (el.tagName !== 'A') {
+                    el.disabled = true;
+                }
+            }
+        });
+        document.querySelectorAll('.btn-detail, .btn-delete-mov, .btn-add-movimiento').forEach(btn => {
+            if (btn.disabled !== undefined) btn.disabled = true;
+        });
+    });
+    {% endif %}
+
+    // Agregar event listener manual para el botón cancelar
+    document.addEventListener('DOMContentLoaded', function() {
+        const cancelBtn = document.querySelector('#movimientoModal .btn-cancel');
+        if (cancelBtn) {
+            cancelBtn.addEventListener('click', function() {
+                const modalElement = document.getElementById('movimientoModal');
+                if (typeof $ !== 'undefined') {
+                    $('#movimientoModal').modal('hide');
+                } else {
+                    modalElement.classList.remove('show');
+                    modalElement.style.display = 'none';
+                    document.body.classList.remove('modal-open');
+                    const backdrop = document.querySelector('.modal-backdrop');
+                    if (backdrop) backdrop.remove();
+                }
+            });
+        }
+    });
+
+</script>
+{% endblock %}
