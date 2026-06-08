@@ -61,16 +61,16 @@
          <a href="{% url 'libro_diario' %}" data-tooltip="Libro Diario" data-submenu="libro_diario" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-pie"></i> <span>Reporte Diario</span>
         </a>
-        <a href="/contabilidad/reporte-mayor/" data-tooltip="Reporte Mayor" data-submenu="reporte_mayor" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <a href="{% url 'libro_mayor' %}" data-tooltip="Libro Mayor" data-submenu="reporte_mayor" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-stats"></i> <span>Reporte Mayor</span>
         </a>
-        <a href="/contabilidad/balance-saldos/" data-tooltip="Balance de Saldos" data-submenu="balance_saldos" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <a href="{% url 'balance_saldos' %}" data-tooltip="Balance de Saldos" data-submenu="balance_saldos" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-scale"></i> <span>Balance de Saldos</span>
         </a>
-        <a href="/contabilidad/balance-general/" data-tooltip="Balance General" data-submenu="balance_general" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <a href="{% url 'balance_general' %}" data-tooltip="Balance General" data-submenu="balance_general" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-podium"></i> <span>Balance General</span>
         </a>
-        <a href="/contabilidad/estado-resultados/" data-tooltip="Estado de Resultados" data-submenu="estado_resultados" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
+        <a href="{% url 'estado_resultados' %}" data-tooltip="Estado de Resultados" data-submenu="estado_resultados" data-parent-menu="contabilidad" onclick="return handleSubmenuClick(this, event, 'contabilidad')">
             <i class="icon ion-md-trending-up"></i> <span>Estado de Resultados</span>
         </a>
     </div>

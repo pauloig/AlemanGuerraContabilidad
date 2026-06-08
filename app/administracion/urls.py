@@ -84,4 +84,20 @@ urlpatterns = [
     # Reportes
     path('reportes/libro-diario/', views.libro_diario, name='libro_diario'),
     path('reportes/libro-diario/excel/', views.libro_diario_excel, name='libro_diario_excel'),
+    path('reportes/libro-diario/pdf/', views.libro_diario_pdf, name='libro_diario_pdf'),
+    path('reportes/libro-mayor/', views.libro_mayor, name='libro_mayor'),
+    path('reportes/libro-mayor/excel/', views.libro_mayor_excel, name='libro_mayor_excel'),
+    path('reportes/libro-mayor/pdf/', views.libro_mayor_pdf, name='libro_mayor_pdf'),
+    path('reportes/balance-saldos/', views.balance_saldos, name='balance_saldos'),
+    path('reportes/balance-saldos/excel/', views.balance_saldos_excel, name='balance_saldos_excel'),
+    path('reportes/balance-saldos/pdf/', views.balance_saldos_pdf, name='balance_saldos_pdf'),
+    path('reportes/balance-general/', views.balance_general, name='balance_general'),
+    path('reportes/balance-general/excel/', views.balance_general_excel, name='balance_general_excel'),
+    path('reportes/balance-general/pdf/', views.balance_general_pdf, name='balance_general_pdf'),
+    path('reportes/estado-resultados/', views.estado_resultados, name='estado_resultados'),
+    path('reportes/estado-resultados/excel/', views.estado_resultados_excel, name='estado_resultados_excel'),
+    path('reportes/estado-resultados/pdf/', views.estado_resultados_pdf, name='estado_resultados_pdf'),
+
+    # Migración de catálogos (sin menú)
+    path('sys/migrar-catalogos/', views.migrar_catalogos_view, name='migrar_catalogos'),
 ]

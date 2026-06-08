@@ -1087,36 +1087,24 @@ def set_periodo_context(request):
 
 def generar_correlativo(empresa_periodo_id, fecha):
     """
-    Genera el siguiente correlativo para un asiento por empresa y mes
+    Genera el siguiente correlativo para un asiento por empresa, mes y año.
+    El correlativo se reinicia cada mes por empresa.
     """
     with transaction.atomic():
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_empresa').get(id=empresa_periodo_id)
         empresa = empresa_periodo.id_empresa
-        anio = fecha.year
-        mes = fecha.month
-        
-        correlativo_obj, created = CorrelativoAsiento.objects.select_for_update().get_or_create(
+
+        correlativo_obj, _ = CorrelativoAsiento.objects.select_for_update().get_or_create(
             id_empresa=empresa,
-            anio=anio,
-            mes=mes,
+            anio=fecha.year,
+            mes=fecha.month,
             defaults={'ultimo_correlativo': 0}
         )
-        
+
         correlativo_obj.ultimo_correlativo += 1
         correlativo_obj.save()
-        
-        nuevo_correlativo = correlativo_obj.ultimo_correlativo
-        
-        # Verificar que el correlativo no exista ya
-        while Asiento.objects.filter(
-            id_empresa_periodo_id=empresa_periodo_id,
-            correlativo=nuevo_correlativo
-        ).exists():
-            nuevo_correlativo += 1
-            correlativo_obj.ultimo_correlativo = nuevo_correlativo
-            correlativo_obj.save()
-        
-        return nuevo_correlativo, anio, mes
+
+        return correlativo_obj.ultimo_correlativo, fecha.year, fecha.month
 
 
 # ==================== VISTAS PARA ASIENTOS ====================
@@ -1488,7 +1476,7 @@ def detalle_list(request, movimiento_id):
     Obtener lista de detalles de un movimiento (vía AJAX)
     """
     movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
-    detalles = movimiento.detalles.all().values('id', 'nombre', 'monto')
+    detalles = movimiento.detalles.all().values('id', 'nombre', 'descripcion', 'monto')
     
     return JsonResponse({
         'success': True,
@@ -1526,6 +1514,7 @@ def detalle_create(request):
             'detalle': {
                 'id': detalle.id,
                 'nombre': detalle.nombre,
+                'descripcion': detalle.descripcion or '',
                 'monto': float(detalle.monto)
             },
             'total_detalles': float(total_detalles),
@@ -1641,14 +1630,7 @@ def libro_diario(request):
     # Procesar filtros
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
-    lineas_por_pagina = request.GET.get('lineas_por_pagina', 20)
-    
-    try:
-        lineas_por_pagina = int(lineas_por_pagina)
-        if lineas_por_pagina < 5 or lineas_por_pagina > 50:
-            lineas_por_pagina = 20
-    except ValueError:
-        lineas_por_pagina = 20
+    lineas_por_pagina = LibroDiarioService.LINEAS_POR_PAGINA
     
     # Fechas por defecto: todo el período
     if fecha_desde:
@@ -1676,7 +1658,7 @@ def libro_diario(request):
     # Obtener asientos finalizados en el rango de fechas
     asientos = Asiento.objects.filter(
         id_empresa_periodo=empresa_periodo,
-        estatus=1,
+        estatus__in=[1, True],
         fecha__range=[fecha_desde, fecha_hasta]
     ).order_by('fecha', 'correlativo')
     
@@ -1694,14 +1676,13 @@ def libro_diario(request):
     
     # Obtener datos estructurados
     datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
-    
+
     # Paginar con VAN/VIENEN
-    LibroDiarioService.LINEAS_POR_PAGINA = lineas_por_pagina
-    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
-    
-    # Totales generales
-    total_debe_general = sum(r['debe'] for r in datos)
-    total_haber_general = sum(r['haber'] for r in datos)
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina)
+
+    # Totales generales — solo de bloques tipo asiento
+    total_debe_general = sum(b['total_debe'] for b in datos if b['tipo'] == 'asiento')
+    total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
     
     context = {
         'empresa': empresa,
@@ -1720,204 +1701,1719 @@ def libro_diario(request):
     return render(request, 'administracion/reportes/libro_diario.html', context)
 
 
-@login_required
-def libro_diario_excel(request):
-    """
-    Exportar Libro Diario a Excel con VAN/VIENEN
-    """
-    # Obtener empresa y período de la sesión
+
+def _get_libro_diario_datos(request):
+    """Helper compartido entre Excel y PDF."""
     empresa_activa_id = request.session.get('empresa_activa_id')
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
-    
+
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
-        return redirect('home')
-    
+        return None, None, None, None, None, None, None
+
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        messages.error(request, 'No se encontró la empresa o período seleccionado')
-        return redirect('home')
-    
-    # Procesar filtros
+        return None, None, None, None, None, None, None
+
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
-    
-    if fecha_desde:
-        try:
-            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
-        except ValueError:
-            fecha_desde = periodo.fecha_inicial
-    else:
+
+    try:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
+    except ValueError:
         fecha_desde = periodo.fecha_inicial
-    
-    if fecha_hasta:
-        try:
-            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-        except ValueError:
-            fecha_hasta = periodo.fecha_final
-    else:
+
+    try:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
+    except ValueError:
         fecha_hasta = periodo.fecha_final
-    
-    # Obtener asientos
+
     asientos = Asiento.objects.filter(
         id_empresa_periodo=empresa_periodo,
-        estatus=1,
+        estatus__in=[1, True],
         fecha__range=[fecha_desde, fecha_hasta]
     ).order_by('fecha', 'correlativo')
-    
+
+    return empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, None
+
+
+@login_required
+def libro_diario_excel(request):
+    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, _ = _get_libro_diario_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
     if not asientos.exists():
         messages.warning(request, 'No hay datos para exportar')
         return redirect('libro_diario')
-    
-    # Obtener datos y paginar
-    datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
-    LibroDiarioService.LINEAS_POR_PAGINA = 30  # Para Excel, más líneas por página
+
+    datos  = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
     paginas = LibroDiarioService.paginar_con_van_vienen(datos)
-    
-    total_debe_general = sum(r['debe'] for r in datos)
-    total_haber_general = sum(r['haber'] for r in datos)
-    
-    # Crear workbook
+    total_debe_general  = sum(b['total_debe']  for b in datos if b['tipo'] == 'asiento')
+    total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Libro Diario"
-    
+
     # Estilos
-    header_font = Font(bold=True, size=11)
-    bold_font = Font(bold=True)
-    center_alignment = Alignment(horizontal='center', vertical='center')
-    right_alignment = Alignment(horizontal='right', vertical='center')
-    left_alignment = Alignment(horizontal='left', vertical='center')
-    thin_border = Border(
-        left=Side(style='thin'),
-        right=Side(style='thin'),
-        top=Side(style='thin'),
-        bottom=Side(style='thin')
+    fnt_titulo   = Font(bold=True, size=13)
+    fnt_bold     = Font(bold=True, size=10)
+    fnt_normal   = Font(size=10)
+    fnt_italica  = Font(size=10, italic=True)
+    fnt_detalle  = Font(size=9, italic=True, color='444444')
+
+    aln_center = Alignment(horizontal='center', vertical='center', wrap_text=True)
+    aln_right  = Alignment(horizontal='right',  vertical='center')
+    aln_left   = Alignment(horizontal='left',   vertical='center', wrap_text=True)
+
+    borde = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
     )
-    gold_fill = PatternFill(start_color='F4B41A', end_color='F4B41A', fill_type='solid')
-    gray_fill = PatternFill(start_color='D3D3D3', end_color='D3D3D3', fill_type='solid')
-    
-    fila_actual = 1
-    
-    # Para cada página
+    borde_grueso_top = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='medium'), bottom=Side(style='thin')
+    )
+    borde_grueso_bot = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='medium')
+    )
+
+    fill_header   = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_mes      = PatternFill(start_color='243B67', end_color='243B67', fill_type='solid')
+    fill_fecha    = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
+    fill_comentario = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
+    fill_van      = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
+    fill_total    = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_detalle  = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
+
+    fnt_header_white = Font(bold=True, size=10, color='FFFFFF')
+    fnt_mes_white    = Font(bold=True, size=10, color='FFFFFF')
+    fnt_total_white  = Font(bold=True, size=10, color='FFFFFF')
+
+    # Columnas: A=Partida(10), B=Cuenta(50), C=Debe(16), D=Haber(16)
+    ws.column_dimensions['A'].width = 10
+    ws.column_dimensions['B'].width = 52
+    ws.column_dimensions['C'].width = 16
+    ws.column_dimensions['D'].width = 16
+
+    fila = 1
+
+    def celda(r, c, valor='', fuente=None, alineacion=None, relleno=None, bordes=None, formato=None):
+        cl = ws.cell(row=r, column=c, value=valor)
+        if fuente:     cl.font      = fuente
+        if alineacion: cl.alignment = alineacion
+        if relleno:    cl.fill      = relleno
+        if bordes:     cl.border    = bordes
+        if formato:    cl.number_format = formato
+        return cl
+
+    def fila_merge(r, texto, fuente, relleno, altura=14):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=4)
+        cl = ws.cell(row=r, column=1, value=texto)
+        cl.font = fuente
+        cl.alignment = aln_center
+        cl.fill = relleno
+        for c in range(1, 5):
+            ws.cell(row=r, column=c).border = borde
+        ws.row_dimensions[r].height = altura
+
     for pagina in paginas:
-        # Encabezado de la página
-        ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=5)
-        celda = ws.cell(row=fila_actual, column=1)
-        celda.value = f"LIBRO DIARIO - {empresa.nombre_comercial or empresa.razon_social}"
-        celda.font = Font(bold=True, size=14)
-        celda.alignment = center_alignment
-        fila_actual += 1
-        
-        ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=5)
-        celda = ws.cell(row=fila_actual, column=1)
-        celda.value = f"Período: {periodo.nombre} ({fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')})"
-        celda.alignment = center_alignment
-        fila_actual += 1
-        
-        fila_actual += 1
-        
-        # Encabezados de columnas
-        headers = ['Fecha', 'Asiento #', 'Cuenta / Detalle', 'Debe', 'Haber']
-        for col, header in enumerate(headers, 1):
-            celda = ws.cell(row=fila_actual, column=col, value=header)
-            celda.font = header_font
-            celda.alignment = center_alignment
-            celda.fill = gold_fill
-            celda.border = thin_border
-        fila_actual += 1
-        
-        # Línea VIENEN (si no es primera página)
-        if not pagina['es_primera'] and (pagina['vienen_debe'] > 0 or pagina['vienen_haber'] > 0):
-            ws.cell(row=fila_actual, column=1, value="").border = thin_border
-            ws.cell(row=fila_actual, column=2, value="").border = thin_border
-            celda = ws.cell(row=fila_actual, column=3, value="VIENEN (Vienen de página anterior)")
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda = ws.cell(row=fila_actual, column=4, value=float(pagina['vienen_debe']))
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda.alignment = right_alignment
-            celda = ws.cell(row=fila_actual, column=5, value=float(pagina['vienen_haber']))
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda.alignment = right_alignment
-            fila_actual += 1
-        
-        # Registros de la página
-        for registro in pagina['registros']:
-            ws.cell(row=fila_actual, column=1, value=registro['fecha'].strftime('%d/%m/%Y') if registro['fecha'] else "").border = thin_border
-            ws.cell(row=fila_actual, column=2, value=registro['correlativo'] if registro['correlativo'] else "").border = thin_border
-            ws.cell(row=fila_actual, column=3, value=registro['cuenta_nombre']).border = thin_border
-            celda = ws.cell(row=fila_actual, column=4, value=float(registro['debe']) if registro['debe'] > 0 else "")
-            celda.alignment = right_alignment
-            celda.border = thin_border
-            celda = ws.cell(row=fila_actual, column=5, value=float(registro['haber']) if registro['haber'] > 0 else "")
-            celda.alignment = right_alignment
-            celda.border = thin_border
-            fila_actual += 1
-        
-        # Línea VAN (si no es última página)
-        if not pagina['es_ultima'] and (pagina['van_debe'] > 0 or pagina['van_haber'] > 0):
-            ws.cell(row=fila_actual, column=1, value="").border = thin_border
-            ws.cell(row=fila_actual, column=2, value="").border = thin_border
-            celda = ws.cell(row=fila_actual, column=3, value="VAN (Van a siguiente página)")
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda = ws.cell(row=fila_actual, column=4, value=float(pagina['van_debe']))
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda.alignment = right_alignment
-            celda = ws.cell(row=fila_actual, column=5, value=float(pagina['van_haber']))
-            celda.font = bold_font
-            celda.fill = gray_fill
-            celda.border = thin_border
-            celda.alignment = right_alignment
-            fila_actual += 1
-        
-        # Salto de página (excepto última página)
+        # Encabezado de página
+        fila_merge(fila, 'LIBRO DIARIO', fnt_titulo, PatternFill(fill_type=None))
+        fila += 1
+        nombre_emp = empresa.nombre_comercial or empresa.razon_social
+        fila_merge(fila, nombre_emp, fnt_bold, PatternFill(fill_type=None))
+        fila += 1
+        fila_merge(fila,
+            f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — "
+            f"Período: {periodo.nombre} — (Expresado en Quetzales) — "
+            f"Página {pagina['numero']} de {len(paginas)}",
+            Font(size=9), PatternFill(fill_type=None), altura=12)
+        fila += 1
+
+        # Encabezados de columna
+        for c, txt in enumerate(['PARTIDA', 'NOMBRE DE LA CUENTA', 'DEBE', 'HABER'], 1):
+            celda(fila, c, txt, fuente=fnt_header_white, alineacion=aln_center, relleno=fill_header, bordes=borde)
+        ws.row_dimensions[fila].height = 15
+        fila += 1
+
+        # VIENEN
+        if not pagina['es_primera']:
+            celda(fila, 1, '', bordes=borde, relleno=fill_van)
+            celda(fila, 2, 'VIENEN', fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde)
+            celda(fila, 3, float(pagina['vienen_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            celda(fila, 4, float(pagina['vienen_haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            fila += 1
+
+        # Registros
+        for reg in pagina['registros']:
+            tipo = reg['tipo']
+
+            if tipo == 'separador_mes':
+                fila_merge(fila, reg['texto'], fnt_mes_white, fill_mes, altura=13)
+                fila += 1
+
+            elif tipo == 'fecha':
+                fila_merge(fila, reg['texto'], fnt_bold, fill_fecha, altura=13)
+                fila += 1
+
+            elif tipo == 'espacio':
+                for c in range(1, 5):
+                    ws.cell(row=fila, column=c).border = Border()
+                ws.row_dimensions[fila].height = 5
+                fila += 1
+
+            elif tipo == 'movimiento':
+                partida_txt = f"---{reg['correlativo']}---" if reg['correlativo'] else ''
+                celda(fila, 1, partida_txt, fuente=fnt_bold, alineacion=aln_center, bordes=borde)
+                celda(fila, 2, reg['cuenta_nombre'], fuente=fnt_normal, alineacion=aln_left, bordes=borde)
+                celda(fila, 3, float(reg['debe'])  if reg['debe']  > 0 else '', fuente=fnt_normal, alineacion=aln_right, bordes=borde, formato='#,##0.00')
+                celda(fila, 4, float(reg['haber']) if reg['haber'] > 0 else '', fuente=fnt_normal, alineacion=aln_right, bordes=borde, formato='#,##0.00')
+                fila += 1
+
+            elif tipo == 'detalle':
+                celda(fila, 1, '', bordes=borde, relleno=fill_detalle)
+                celda(fila, 2, f'  {reg["cuenta_nombre"]}', fuente=fnt_detalle, alineacion=aln_left, relleno=fill_detalle, bordes=borde)
+                celda(fila, 3, float(reg['debe'])  if reg['debe']  > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde, formato='#,##0.00')
+                celda(fila, 4, float(reg['haber']) if reg['haber'] > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde, formato='#,##0.00')
+                fila += 1
+
+            elif tipo == 'comentario':
+                celda(fila, 1, '', relleno=fill_comentario, bordes=borde_grueso_top)
+                celda(fila, 2, f"v/ {reg['cuenta_nombre']}", fuente=fnt_italica, alineacion=aln_left, relleno=fill_comentario, bordes=borde_grueso_top)
+                celda(fila, 3, float(reg['debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_comentario, bordes=borde_grueso_top, formato='#,##0.00')
+                celda(fila, 4, float(reg['haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_comentario, bordes=borde_grueso_top, formato='#,##0.00')
+                fila += 1
+
+        # VAN
         if not pagina['es_ultima']:
-            ws.page_breaks.append(fila_actual)
-            fila_actual += 2
-    
-    # Totales generales al final
-    fila_actual += 1
-    
-    ws.merge_cells(start_row=fila_actual, start_column=1, end_row=fila_actual, end_column=3)
-    celda = ws.cell(row=fila_actual, column=1, value="TOTALES GENERALES")
-    celda.font = bold_font
-    celda.alignment = right_alignment
-    celda.border = thin_border
-    
-    celda = ws.cell(row=fila_actual, column=4, value=float(total_debe_general))
-    celda.font = bold_font
-    celda.border = thin_border
-    celda.alignment = right_alignment
-    
-    celda = ws.cell(row=fila_actual, column=5, value=float(total_haber_general))
-    celda.font = bold_font
-    celda.border = thin_border
-    celda.alignment = right_alignment
-    
-    # Ajustar anchos de columna
-    ws.column_dimensions['A'].width = 12
-    ws.column_dimensions['B'].width = 12
-    ws.column_dimensions['C'].width = 50
-    ws.column_dimensions['D'].width = 15
-    ws.column_dimensions['E'].width = 15
-    
-    # Configurar respuesta HTTP
-    nombre_archivo = f"Libro_Diario_{empresa.nombre_comercial or empresa.razon_social}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+            celda(fila, 1, '', bordes=borde, relleno=fill_van)
+            celda(fila, 2, 'VAN', fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde)
+            celda(fila, 3, float(pagina['acumulado_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            celda(fila, 4, float(pagina['acumulado_haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            fila += 1
+            # Salto de página Excel
+            from openpyxl.worksheet.pagebreak import Break
+            ws.row_breaks.append(Break(id=fila))
+            fila += 3
+
+    # Totales generales
+    fila += 1
+    celda(fila, 1, '', relleno=fill_total, bordes=borde)
+    celda(fila, 2, 'TOTALES GENERALES DEL PERÍODO', fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde)
+    celda(fila, 3, float(total_debe_general),  fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
+    celda(fila, 4, float(total_haber_general), fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
+
+    # Configuración de impresión
+    ws.page_setup.paperSize  = ws.PAPERSIZE_LETTER
+    ws.page_setup.orientation = 'portrait'
+    ws.page_setup.fitToPage  = True
+    ws.page_setup.fitToWidth = 1
+    ws.page_margins.left   = 0.5
+    ws.page_margins.right  = 0.5
+    ws.page_margins.top    = 0.75
+    ws.page_margins.bottom = 0.75
+
+    nombre = f"LibroDiario_{(empresa.nombre_comercial or empresa.razon_social).replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
-    response['Content-Disposition'] = f'attachment; filename="{nombre_archivo}"'
-    
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
     wb.save(response)
     return response
+
+
+@login_required
+def libro_diario_pdf(request):
+    from io import BytesIO
+    try:
+        from xhtml2pdf import pisa
+    except ImportError:
+        messages.error(request, 'xhtml2pdf no está instalado. Ejecute: pip install xhtml2pdf')
+        return redirect('libro_diario')
+
+    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, _ = _get_libro_diario_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not asientos.exists():
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('libro_diario')
+
+    datos   = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
+    total_debe_general  = sum(b['total_debe']  for b in datos if b['tipo'] == 'asiento')
+    total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+
+    html = f"""<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<style>
+  @page {{
+    size: letter portrait;
+    margin: 1.5cm 1.8cm;
+  }}
+  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
+  .page-break {{ page-break-before: always; }}
+  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
+  h2 {{ font-size: 9pt;  text-align: center; margin: 0 0 2px; font-weight: normal; }}
+  h3 {{ font-size: 8pt;  text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  table {{ border-collapse: collapse; margin-top: 4px; width: 97%; margin-left: 1.5%; margin-right: 1.5%; }}
+  th {{ background-color: #EEF2F7; color: #0A1628; font-size: 8pt; padding: 3px 5px;
+        border: 0.5pt solid #94a3b8; text-align: center; font-weight: bold; }}
+  td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; vertical-align: middle; font-size: 7.5pt; }}
+  .col-partida {{ width: 52pt; text-align: center; }}
+  .col-cuenta  {{ text-align: left; }}
+  .col-monto   {{ width: 70pt; text-align: right; }}
+  .row-mes td  {{ background-color: #EEF2F7; color: #0A1628; font-weight: bold;
+                  text-align: center; font-size: 8pt;
+                  border: 0.5pt solid #94a3b8; padding: 2px 5px; line-height: 1.1; }}
+  .row-fecha td {{ background-color: #EEF2F7; font-weight: bold; text-align: center;
+                   padding: 2px 4px; border: 0.5pt solid #94a3b8; line-height: 1.1; }}
+  .row-detalle td {{ background-color: #F9FAFB; font-style: italic; color: #444; padding-left: 14pt; }}
+  .row-comentario td {{ background-color: #E5E7EB; font-style: italic;
+                        border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
+  .row-comentario .col-monto {{ font-weight: bold; font-style: normal; }}
+  .row-espacio td {{ border: none; height: 4pt; background: white; }}
+  .row-van td, .row-vienen td {{ background-color: #D1D5DB; font-weight: bold;
+                                  border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
+  .row-van .col-cuenta, .row-vienen .col-cuenta {{ text-align: right; }}
+  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold; border-top: 1pt solid #000; }}
+  .row-total .col-cuenta {{ text-align: right; }}
+</style>
+</head>
+<body>
+"""
+
+    for i, pagina in enumerate(paginas):
+        if i > 0:
+            html += '<div class="page-break"></div>'
+
+        html += f"""
+<h1>LIBRO DIARIO</h1>
+<h2>{nombre_empresa}</h2>
+<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
+Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash;
+Pagina {pagina['numero']} de {len(paginas)}</h3>
+<table>
+<thead>
+  <tr>
+    <th class="col-partida">PARTIDA</th>
+    <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
+    <th class="col-monto">DEBE</th>
+    <th class="col-monto">HABER</th>
+  </tr>
+</thead>
+<tbody>
+"""
+        if not pagina['es_primera']:
+            html += f"""<tr class="row-vienen">
+  <td class="col-partida"></td>
+  <td class="col-cuenta" style="text-align:right;">VIENEN</td>
+  <td class="col-monto">{pagina['vienen_debe']:,.2f}</td>
+  <td class="col-monto">{pagina['vienen_haber']:,.2f}</td>
+</tr>"""
+
+        for reg in pagina['registros']:
+            tipo = reg['tipo']
+
+            if tipo == 'separador_mes':
+                html += f'<tr class="row-mes"><td colspan="4">{reg["texto"]}</td></tr>'
+
+            elif tipo == 'fecha':
+                html += f'<tr class="row-fecha"><td colspan="4">{reg["texto"]}</td></tr>'
+
+            elif tipo == 'espacio':
+                html += '<tr class="row-espacio"><td colspan="4"></td></tr>'
+
+            elif tipo == 'movimiento':
+                partida = f"---{reg['correlativo']}---" if reg['correlativo'] else ''
+                debe  = f"{reg['debe']:,.2f}"  if reg['debe']  > 0 else ''
+                haber = f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
+                html += f"""<tr>
+  <td class="col-partida">{partida}</td>
+  <td class="col-cuenta">{reg['cuenta_nombre']}</td>
+  <td class="col-monto">{debe}</td>
+  <td class="col-monto">{haber}</td>
+</tr>"""
+
+            elif tipo == 'detalle':
+                debe  = f"{reg['debe']:,.2f}"  if reg['debe']  > 0 else ''
+                haber = f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
+                html += f"""<tr class="row-detalle">
+  <td class="col-partida"></td>
+  <td class="col-cuenta">{reg['cuenta_nombre']}</td>
+  <td class="col-monto">{debe}</td>
+  <td class="col-monto">{haber}</td>
+</tr>"""
+
+            elif tipo == 'comentario':
+                html += f"""<tr class="row-comentario">
+  <td class="col-partida"></td>
+  <td class="col-cuenta">v/ {reg['cuenta_nombre']}</td>
+  <td class="col-monto">{reg['debe']:,.2f}</td>
+  <td class="col-monto">{reg['haber']:,.2f}</td>
+</tr>"""
+
+        if not pagina['es_ultima']:
+            html += f"""<tr class="row-van">
+  <td class="col-partida"></td>
+  <td class="col-cuenta" style="text-align:right;">VAN</td>
+  <td class="col-monto">{pagina['acumulado_debe']:,.2f}</td>
+  <td class="col-monto">{pagina['acumulado_haber']:,.2f}</td>
+</tr>"""
+
+        html += '</tbody></table>'
+
+    html += f"""
+<table style="margin-top:6pt;">
+<tbody>
+<tr class="row-total">
+  <td class="col-partida"></td>
+  <td class="col-cuenta">TOTALES GENERALES DEL PERIODO</td>
+  <td class="col-monto">{total_debe_general:,.2f}</td>
+  <td class="col-monto">{total_haber_general:,.2f}</td>
+</tr>
+</tbody>
+</table>
+</body></html>"""
+
+    buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+
+    if pisa_status.err:
+        messages.error(request, 'Error al generar el PDF')
+        return redirect('libro_diario')
+
+    buffer.seek(0)
+    nombre = f"LibroDiario_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.pdf"
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+
+
+
+# ==================== ESTADO DE RESULTADOS ====================
+
+def _get_estado_resultados_datos(request):
+    from administracion.services.estado_resultados_service import EstadoResultadosService
+
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        return None, None, None, None, None
+
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        return None, None, None, None, None
+
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+
+    try:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
+    except ValueError:
+        fecha_desde = periodo.fecha_inicial
+
+    try:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
+    except ValueError:
+        fecha_hasta = periodo.fecha_final
+
+    datos = EstadoResultadosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
+    return empresa, periodo, fecha_desde, fecha_hasta, datos
+
+
+@login_required
+def estado_resultados(request):
+    empresa, periodo, fecha_desde, fecha_hasta, datos = _get_estado_resultados_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    sin_datos = not datos['ingresos']['grupos'] and not datos['egresos']['grupos']
+
+    return render(request, 'administracion/reportes/estado_resultados.html', {
+        'sin_datos':     sin_datos,
+        'empresa':       empresa,
+        'periodo':       periodo,
+        'fecha_desde':   fecha_desde,
+        'fecha_hasta':   fecha_hasta,
+        'datos':         datos,
+        'fecha_reporte': timezone.now(),
+    })
+
+
+@login_required
+def estado_resultados_excel(request):
+    from decimal import Decimal
+
+    empresa, periodo, fecha_desde, fecha_hasta, datos = _get_estado_resultados_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not datos['ingresos']['grupos'] and not datos['egresos']['grupos']:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('estado_resultados')
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Estado de Resultados"
+
+    fnt_titulo = Font(bold=True, size=13)
+    fnt_bold   = Font(bold=True, size=10)
+    fnt_normal = Font(size=10)
+
+    aln_center = Alignment(horizontal='center', vertical='center')
+    aln_right  = Alignment(horizontal='right',  vertical='center')
+    aln_left   = Alignment(horizontal='left',   vertical='center')
+
+    borde = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
+    )
+
+    fill_header  = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_sg      = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
+    fill_sg_tot  = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
+    fill_sec_tot = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
+    fill_util    = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
+    fill_perd    = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid')
+    fill_alt     = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
+
+    fnt_white = Font(bold=True, size=10, color='FFFFFF')
+    fnt_util  = Font(bold=True, size=11, color='065F46')
+    fnt_perd  = Font(bold=True, size=11, color='991B1B')
+
+    ws.column_dimensions['A'].width = 52
+    ws.column_dimensions['B'].width = 18
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    fila = 1
+
+    def merge(r, val, fuente, relleno, altura=14):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=2)
+        cl = ws.cell(row=r, column=1, value=val)
+        cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
+        for c in range(1, 3): ws.cell(row=r, column=c).border = borde
+        ws.row_dimensions[r].height = altura
+
+    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None):
+        cl = ws.cell(row=r, column=c, value=val)
+        if fuente:  cl.font      = fuente
+        if aln:     cl.alignment = aln
+        if relleno: cl.fill      = relleno
+        if fmt:     cl.number_format = fmt
+        cl.border = borde
+        return cl
+
+    merge(fila, 'ESTADO DE RESULTADOS', fnt_titulo, PatternFill(fill_type=None), 18); fila += 1
+    merge(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None)); fila += 1
+    merge(fila,
+        f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)",
+        Font(size=9), PatternFill(fill_type=None), 12)
+    fila += 2
+
+    def escribir_seccion(titulo, grupos, total):
+        nonlocal fila
+        merge(fila, titulo, fnt_white, fill_header, 14); fila += 1
+
+        for grupo in grupos:
+            if len(grupo['cuentas']) > 1:
+                merge(fila, grupo['nombre'], fnt_bold, fill_sg, 13); fila += 1
+
+            for i, c in enumerate(grupo['cuentas']):
+                rf = fill_alt if i % 2 == 1 else None
+                cel(fila, 1, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
+                cel(fila, 2, float(c['monto']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                fila += 1
+
+            if len(grupo['cuentas']) > 1:
+                cel(fila, 1, f"Subtotal {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_sg_tot)
+                cel(fila, 2, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_sg_tot, fmt='#,##0.00')
+                fila += 1
+
+        cel(fila, 1, f"TOTAL {titulo}", fuente=fnt_bold, aln=aln_right, relleno=fill_sec_tot)
+        cel(fila, 2, float(total), fuente=fnt_bold, aln=aln_right, relleno=fill_sec_tot, fmt='#,##0.00')
+        fila += 2
+
+    escribir_seccion('INGRESOS', datos['ingresos']['grupos'], datos['ingresos']['total'])
+    escribir_seccion('EGRESOS',  datos['egresos']['grupos'],  datos['egresos']['total'])
+
+    lbl = 'UTILIDAD DEL EJERCICIO' if datos['es_utilidad'] else 'PÉRDIDA DEL EJERCICIO'
+    fill_r = fill_util if datos['es_utilidad'] else fill_perd
+    fnt_r  = fnt_util  if datos['es_utilidad'] else fnt_perd
+    val_r  = float(datos['utilidad']) * (1 if datos['es_utilidad'] else -1)
+    cel(fila, 1, lbl, fuente=fnt_r, aln=aln_right, relleno=fill_r)
+    cel(fila, 2, val_r, fuente=fnt_r, aln=aln_right, relleno=fill_r, fmt='#,##0.00')
+
+    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+    ws.page_setup.orientation = 'portrait'
+    ws.page_setup.fitToPage   = True
+    ws.page_setup.fitToWidth  = 1
+
+    nombre = f"EstadoResultados_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def estado_resultados_pdf(request):
+    from io import BytesIO
+    from decimal import Decimal
+    try:
+        from xhtml2pdf import pisa
+    except ImportError:
+        messages.error(request, 'xhtml2pdf no está instalado.')
+        return redirect('estado_resultados')
+
+    empresa, periodo, fecha_desde, fecha_hasta, datos = _get_estado_resultados_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+
+    def render_seccion(titulo, grupos, total):
+        html = f'<tr class="sec-hdr"><td colspan="2">{titulo}</td></tr>'
+        for grupo in grupos:
+            if len(grupo['cuentas']) > 1:
+                html += f'<tr class="sg-hdr"><td colspan="2">{grupo["nombre"]}</td></tr>'
+            for j, c in enumerate(grupo['cuentas']):
+                cls = 'alt' if j % 2 else ''
+                html += f'<tr class="{cls}"><td class="ind">{c["cuenta"].nombre}</td><td class="num">{c["monto"]:,.2f}</td></tr>'
+            if len(grupo['cuentas']) > 1:
+                html += f'<tr class="sg-tot"><td style="text-align:right;">Subtotal {grupo["nombre"]}</td><td class="num">{grupo["subtotal"]:,.2f}</td></tr>'
+        html += f'<tr class="sec-tot"><td style="text-align:right;">TOTAL {titulo}</td><td class="num">{total:,.2f}</td></tr>'
+        html += '<tr class="sep"><td colspan="2"></td></tr>'
+        return html
+
+    lbl_res = 'UTILIDAD DEL EJERCICIO' if datos['es_utilidad'] else 'PERDIDA DEL EJERCICIO'
+    cls_res = 'util' if datos['es_utilidad'] else 'perd'
+    val_res = datos['utilidad']
+    fmt_res = f"{val_res:,.2f}" if datos['es_utilidad'] else f"({val_res:,.2f})"
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
+  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
+  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
+  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
+  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  table {{ width: 70%; margin: 0 auto; border-collapse: collapse; }}
+  td {{ border: 0.5pt solid #94a3b8; padding: 2px 6px; font-size: 7.5pt; }}
+  .num {{ text-align: right; width: 80pt; }}
+  .ind {{ padding-left: 16pt; }}
+  .sec-hdr td {{ background-color: #1B2B4E; color: white; font-weight: bold;
+                  font-size: 8.5pt; padding: 4px 6px; border-top: 1pt solid #C5A028; }}
+  .sg-hdr  td {{ background-color: #EEF2F7; font-weight: bold; padding: 2px 6px; }}
+  .alt     td {{ background-color: #F9FAFB; }}
+  .sg-tot  td {{ background-color: #E5E7EB; font-weight: bold; border-top: 0.8pt solid #000; }}
+  .sec-tot td {{ background-color: #D1D5DB; font-weight: bold;
+                  border-top: 1pt solid #000; border-bottom: 1pt solid #000; font-size: 8.5pt; }}
+  .sep     td {{ border: none; height: 6pt; background: white; }}
+  .util    td {{ background-color: #D1FAE5; color: #065F46; font-weight: bold;
+                  border-top: 1.5pt solid #000; border-bottom: 2pt double #000; font-size: 9pt; }}
+  .perd    td {{ background-color: #FEE2E2; color: #991B1B; font-weight: bold;
+                  border-top: 1.5pt solid #000; border-bottom: 2pt double #000; font-size: 9pt; }}
+</style></head><body>
+<h1>ESTADO DE RESULTADOS</h1>
+<h2>{nombre_empresa}</h2>
+<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; (Expresado en Quetzales)</h3>
+<table>
+<tbody>
+{render_seccion('INGRESOS', datos['ingresos']['grupos'], datos['ingresos']['total'])}
+{render_seccion('EGRESOS',  datos['egresos']['grupos'],  datos['egresos']['total'])}
+<tr class="{cls_res}">
+  <td style="text-align:right;">{lbl_res}</td>
+  <td class="num">{fmt_res}</td>
+</tr>
+</tbody>
+</table>
+</body></html>"""
+
+    buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+    if pisa_status.err:
+        messages.error(request, 'Error al generar el PDF')
+        return redirect('estado_resultados')
+
+    buffer.seek(0)
+    nombre = f"EstadoResultados_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.pdf"
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+# ==================== BALANCE GENERAL ====================
+
+def _get_balance_general_datos(request):
+    from administracion.services.balance_general_service import BalanceGeneralService
+
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        return None, None, None, None
+
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        return None, None, None, None
+
+    fecha_hasta = request.GET.get('fecha_hasta')
+    try:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
+    except ValueError:
+        fecha_hasta = periodo.fecha_final
+
+    datos = BalanceGeneralService.get_datos_reporte(empresa_periodo, fecha_hasta)
+    return empresa, periodo, fecha_hasta, datos
+
+
+@login_required
+def balance_general(request):
+    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    sin_datos = (
+        not datos['activo']['grupos'] and
+        not datos['pasivo']['grupos'] and
+        not datos['capital']['grupos'] and
+        datos['capital']['utilidad_ejercicio'] == 0
+    )
+
+    from decimal import Decimal
+    diferencia = abs(datos['activo']['total'] - datos['total_pasivo_capital'])
+
+    return render(request, 'administracion/reportes/balance_general.html', {
+        'sin_datos':    sin_datos,
+        'empresa':      empresa,
+        'periodo':      periodo,
+        'fecha_hasta':  fecha_hasta,
+        'datos':        datos,
+        'diferencia':   diferencia,
+        'fecha_reporte': timezone.now(),
+    })
+
+
+@login_required
+def balance_general_excel(request):
+    from decimal import Decimal
+
+    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Balance General"
+
+    fnt_titulo = Font(bold=True, size=13)
+    fnt_bold   = Font(bold=True, size=10)
+    fnt_normal = Font(size=10)
+
+    aln_center = Alignment(horizontal='center', vertical='center')
+    aln_right  = Alignment(horizontal='right',  vertical='center')
+    aln_left   = Alignment(horizontal='left',   vertical='center')
+
+    borde = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
+    )
+
+    fill_header  = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_sec     = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
+    fill_subtot  = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
+    fill_total   = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_subtot2 = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
+    fill_alt     = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
+    fill_util    = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
+    fill_perd    = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid')
+
+    fnt_white     = Font(bold=True, size=10, color='FFFFFF')
+    fnt_util      = Font(bold=True, size=10, color='065F46')
+    fnt_perd      = Font(bold=True, size=10, color='991B1B')
+
+    # Columnas: A-B = Activo, C vacía, D-E = Pasivo+Capital
+    ws.column_dimensions['A'].width = 38
+    ws.column_dimensions['B'].width = 16
+    ws.column_dimensions['C'].width = 3
+    ws.column_dimensions['D'].width = 38
+    ws.column_dimensions['E'].width = 16
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    fila = 1
+
+    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None, merge_end=None):
+        if merge_end:
+            ws.merge_cells(start_row=r, start_column=c, end_row=r, end_column=merge_end)
+        cl = ws.cell(row=r, column=c, value=val)
+        if fuente:  cl.font      = fuente
+        if aln:     cl.alignment = aln
+        if relleno: cl.fill      = relleno
+        if fmt:     cl.number_format = fmt
+        cl.border = borde
+        return cl
+
+    def encabezado_col(r, col_ini, titulo):
+        ws.merge_cells(start_row=r, start_column=col_ini, end_row=r, end_column=col_ini+1)
+        cl = ws.cell(row=r, column=col_ini, value=titulo)
+        cl.font = fnt_white; cl.alignment = aln_center; cl.fill = fill_header
+        ws.cell(row=r, column=col_ini).border = borde
+        ws.cell(row=r, column=col_ini+1).border = borde
+
+    # Título
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
+    cl = ws.cell(row=fila, column=1, value='BALANCE GENERAL')
+    cl.font = fnt_titulo; cl.alignment = aln_center
+    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde
+    ws.row_dimensions[fila].height = 18; fila += 1
+
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
+    cl = ws.cell(row=fila, column=1, value=nombre_empresa)
+    cl.font = fnt_bold; cl.alignment = aln_center
+    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde; fila += 1
+
+    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
+    cl = ws.cell(row=fila, column=1, value=f"Al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)")
+    cl.font = Font(size=9); cl.alignment = aln_center
+    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde
+    fila += 2
+
+    # Encabezados de columna
+    encabezado_col(fila, 1, 'ACTIVO')
+    ws.cell(row=fila, column=3).border = borde
+    encabezado_col(fila, 4, 'PASIVO + CAPITAL')
+    ws.row_dimensions[fila].height = 14; fila += 1
+
+    fila_inicio = fila
+
+    # ── ACTIVO ──
+    fila_act = fila
+    for grupo in datos['activo']['grupos']:
+        ws.merge_cells(start_row=fila_act, start_column=1, end_row=fila_act, end_column=2)
+        cl = ws.cell(row=fila_act, column=1, value=grupo['nombre'].upper())
+        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
+        ws.cell(row=fila_act, column=2).fill = fill_sec; ws.cell(row=fila_act, column=2).border = borde
+        fila_act += 1
+
+        for i, c in enumerate(grupo['cuentas']):
+            rf = fill_alt if i % 2 == 1 else None
+            cel(fila_act, 1, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
+            cel(fila_act, 2, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            fila_act += 1
+
+        cel(fila_act, 1, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        cel(fila_act, 2, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
+        fila_act += 1
+
+    cel(fila_act, 1, 'TOTAL ACTIVO', fuente=fnt_white, aln=aln_right, relleno=fill_total)
+    cel(fila_act, 2, float(datos['activo']['total']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+    fila_act += 1
+
+    # ── PASIVO + CAPITAL ──
+    fila_pas = fila
+
+    # Encabezado PASIVO
+    ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
+    cl = ws.cell(row=fila_pas, column=4, value='PASIVO')
+    cl.font = fnt_white; cl.fill = fill_header; cl.alignment = aln_center; cl.border = borde
+    ws.cell(row=fila_pas, column=5).fill = fill_header; ws.cell(row=fila_pas, column=5).border = borde
+    fila_pas += 1
+
+    for grupo in datos['pasivo']['grupos']:
+        ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
+        cl = ws.cell(row=fila_pas, column=4, value=grupo['nombre'].upper())
+        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
+        ws.cell(row=fila_pas, column=5).fill = fill_sec; ws.cell(row=fila_pas, column=5).border = borde
+        fila_pas += 1
+
+        for i, c in enumerate(grupo['cuentas']):
+            rf = fill_alt if i % 2 == 1 else None
+            cel(fila_pas, 4, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
+            cel(fila_pas, 5, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            fila_pas += 1
+
+        cel(fila_pas, 4, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        cel(fila_pas, 5, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
+        fila_pas += 1
+
+    cel(fila_pas, 4, 'TOTAL PASIVO', fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2)
+    cel(fila_pas, 5, float(datos['pasivo']['total']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2, fmt='#,##0.00')
+    fila_pas += 1
+
+    # Encabezado CAPITAL
+    ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
+    cl = ws.cell(row=fila_pas, column=4, value='CAPITAL')
+    cl.font = fnt_white; cl.fill = fill_header; cl.alignment = aln_center; cl.border = borde
+    ws.cell(row=fila_pas, column=5).fill = fill_header; ws.cell(row=fila_pas, column=5).border = borde
+    fila_pas += 1
+
+    for grupo in datos['capital']['grupos']:
+        ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
+        cl = ws.cell(row=fila_pas, column=4, value=grupo['nombre'].upper())
+        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
+        ws.cell(row=fila_pas, column=5).fill = fill_sec; ws.cell(row=fila_pas, column=5).border = borde
+        fila_pas += 1
+
+        for i, c in enumerate(grupo['cuentas']):
+            rf = fill_alt if i % 2 == 1 else None
+            cel(fila_pas, 4, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
+            cel(fila_pas, 5, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            fila_pas += 1
+
+        cel(fila_pas, 4, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        cel(fila_pas, 5, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
+        fila_pas += 1
+
+    # Utilidad/Pérdida
+    lbl_util = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Pérdida del Ejercicio'
+    fill_u = fill_util if datos['capital']['es_utilidad'] else fill_perd
+    fnt_u  = fnt_util  if datos['capital']['es_utilidad'] else fnt_perd
+    val_u  = float(datos['capital']['utilidad_ejercicio'])
+    if not datos['capital']['es_utilidad']:
+        val_u = -val_u
+    cel(fila_pas, 4, lbl_util, fuente=fnt_u, aln=aln_left, relleno=fill_u)
+    cel(fila_pas, 5, val_u, fuente=fnt_u, aln=aln_right, relleno=fill_u, fmt='#,##0.00')
+    fila_pas += 1
+
+    cel(fila_pas, 4, 'TOTAL CAPITAL', fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2)
+    cel(fila_pas, 5, float(datos['capital']['total']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2, fmt='#,##0.00')
+    fila_pas += 1
+
+    cel(fila_pas, 4, 'TOTAL PASIVO + CAPITAL', fuente=fnt_white, aln=aln_right, relleno=fill_total)
+    cel(fila_pas, 5, float(datos['total_pasivo_capital']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+
+    # Columna separadora vacía
+    for r in range(fila_inicio, max(fila_act, fila_pas) + 1):
+        ws.cell(row=r, column=3).border = borde
+
+    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage   = True
+    ws.page_setup.fitToWidth  = 1
+
+    nombre = f"BalanceGeneral_{nombre_empresa.replace(' ','_')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def balance_general_pdf(request):
+    from io import BytesIO
+    from decimal import Decimal
+    try:
+        from xhtml2pdf import pisa
+    except ImportError:
+        messages.error(request, 'xhtml2pdf no está instalado.')
+        return redirect('balance_general')
+
+    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+
+    def filas_activo():
+        rows = ''
+        for grupo in datos['activo']['grupos']:
+            rows += f'<tr class="sec-hdr"><td colspan="2">{grupo["nombre"].upper()}</td></tr>'
+            for j, c in enumerate(grupo['cuentas']):
+                cls = 'alt' if j % 2 else ''
+                rows += f'<tr class="{cls}"><td class="ind">{c["cuenta"].nombre}</td><td class="num">{c["saldo"]:,.2f}</td></tr>'
+            rows += f'<tr class="sub"><td>Total {grupo["nombre"]}</td><td class="num">{grupo["subtotal"]:,.2f}</td></tr>'
+        rows += f'<tr class="tot"><td>TOTAL ACTIVO</td><td class="num">{datos["activo"]["total"]:,.2f}</td></tr>'
+        return rows
+
+    def filas_pasivo_capital():
+        rows = '<tr class="col-hdr"><td colspan="2">PASIVO</td></tr>'
+        for grupo in datos['pasivo']['grupos']:
+            rows += f'<tr class="sec-hdr"><td colspan="2">{grupo["nombre"].upper()}</td></tr>'
+            for j, c in enumerate(grupo['cuentas']):
+                cls = 'alt' if j % 2 else ''
+                rows += f'<tr class="{cls}"><td class="ind">{c["cuenta"].nombre}</td><td class="num">{c["saldo"]:,.2f}</td></tr>'
+            rows += f'<tr class="sub"><td>Total {grupo["nombre"]}</td><td class="num">{grupo["subtotal"]:,.2f}</td></tr>'
+        rows += f'<tr class="sub2"><td>TOTAL PASIVO</td><td class="num">{datos["pasivo"]["total"]:,.2f}</td></tr>'
+
+        rows += '<tr class="col-hdr"><td colspan="2">CAPITAL</td></tr>'
+        for grupo in datos['capital']['grupos']:
+            rows += f'<tr class="sec-hdr"><td colspan="2">{grupo["nombre"].upper()}</td></tr>'
+            for j, c in enumerate(grupo['cuentas']):
+                cls = 'alt' if j % 2 else ''
+                rows += f'<tr class="{cls}"><td class="ind">{c["cuenta"].nombre}</td><td class="num">{c["saldo"]:,.2f}</td></tr>'
+            rows += f'<tr class="sub"><td>Total {grupo["nombre"]}</td><td class="num">{grupo["subtotal"]:,.2f}</td></tr>'
+
+        lbl = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Perdida del Ejercicio'
+        cls_u = 'util' if datos['capital']['es_utilidad'] else 'perd'
+        val_u = datos['capital']['utilidad_ejercicio']
+        if not datos['capital']['es_utilidad']:
+            rows += f'<tr class="{cls_u}"><td class="ind">{lbl}</td><td class="num">({val_u:,.2f})</td></tr>'
+        else:
+            rows += f'<tr class="{cls_u}"><td class="ind">{lbl}</td><td class="num">{val_u:,.2f}</td></tr>'
+
+        rows += f'<tr class="sub2"><td>TOTAL CAPITAL</td><td class="num">{datos["capital"]["total"]:,.2f}</td></tr>'
+        rows += f'<tr class="tot"><td>TOTAL PASIVO + CAPITAL</td><td class="num">{datos["total_pasivo_capital"]:,.2f}</td></tr>'
+        return rows
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
+  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; margin: 0; }}
+  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
+  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
+  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  .columnas {{ width: 100%; border-collapse: collapse; }}
+  .col-activo, .col-pasivo {{ width: 49%; vertical-align: top; padding: 0 4pt; }}
+  .sep {{ width: 2%; }}
+  table.detalle {{ width: 100%; border-collapse: collapse; font-size: 7.5pt; }}
+  table.detalle td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; }}
+  .col-hdr td {{ background-color: #1B2B4E; color: white; font-weight: bold;
+                  text-align: center; font-size: 8pt; padding: 3px; border: 0.5pt solid #000; }}
+  .sec-hdr td {{ background-color: #EEF2F7; font-weight: bold; font-size: 7.5pt;
+                  border: 0.5pt solid #94a3b8; padding: 2px 5px; }}
+  .alt td {{ background-color: #F9FAFB; }}
+  .ind {{ padding-left: 14pt !important; }}
+  .num {{ text-align: right; }}
+  .sub td  {{ background-color: #E5E7EB; font-weight: bold; border-top: 0.8pt solid #000; }}
+  .sub2 td {{ background-color: #D1D5DB; font-weight: bold; border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
+  .tot td  {{ background-color: #1B2B4E; color: white; font-weight: bold; border-top: 1.5pt solid #C5A028; }}
+  .util td {{ background-color: #D1FAE5; color: #065F46; font-weight: bold; }}
+  .perd td {{ background-color: #FEE2E2; color: #991B1B; font-weight: bold; }}
+</style></head><body>
+<h1>BALANCE GENERAL</h1>
+<h2>{nombre_empresa}</h2>
+<h3>Al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; (Expresado en Quetzales)</h3>
+<table class="columnas">
+<tr>
+  <td class="col-activo">
+    <table class="detalle">
+      <tr class="col-hdr"><td colspan="2">ACTIVO</td></tr>
+      {filas_activo()}
+    </table>
+  </td>
+  <td class="sep"></td>
+  <td class="col-pasivo">
+    <table class="detalle">
+      {filas_pasivo_capital()}
+    </table>
+  </td>
+</tr>
+</table>
+</body></html>"""
+
+    buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+    if pisa_status.err:
+        messages.error(request, 'Error al generar el PDF')
+        return redirect('balance_general')
+
+    buffer.seek(0)
+    nombre = f"BalanceGeneral_{nombre_empresa.replace(' ','_')}_{fecha_hasta.strftime('%Y%m%d')}.pdf"
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+# ==================== BALANCE DE SALDOS ====================
+
+def _get_balance_saldos_datos(request):
+    from administracion.services.balance_saldos_service import BalanceSaldosService
+
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        return None, None, None, None, None, None
+
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        return None, None, None, None, None, None
+
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+
+    try:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
+    except ValueError:
+        fecha_desde = periodo.fecha_inicial
+
+    try:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
+    except ValueError:
+        fecha_hasta = periodo.fecha_final
+
+    grupos, totales = BalanceSaldosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
+    return empresa, periodo, fecha_desde, fecha_hasta, grupos, totales
+
+
+@login_required
+def balance_saldos(request):
+    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not grupos:
+        return render(request, 'administracion/reportes/balance_saldos.html', {
+            'sin_datos': True,
+            'empresa': empresa,
+            'periodo': periodo,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+        })
+
+    total_cuentas = sum(len(g['cuentas']) for g in grupos)
+
+    return render(request, 'administracion/reportes/balance_saldos.html', {
+        'sin_datos': False,
+        'empresa': empresa,
+        'periodo': periodo,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+        'grupos': grupos,
+        'totales': totales,
+        'total_cuentas': total_cuentas,
+        'fecha_reporte': timezone.now(),
+    })
+
+
+@login_required
+def balance_saldos_excel(request):
+    from decimal import Decimal
+
+    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not grupos:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('balance_saldos')
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Balance de Saldos"
+
+    fnt_titulo = Font(bold=True, size=13)
+    fnt_bold   = Font(bold=True, size=10)
+    fnt_normal = Font(size=10)
+
+    aln_center = Alignment(horizontal='center', vertical='center')
+    aln_right  = Alignment(horizontal='right',  vertical='center')
+    aln_left   = Alignment(horizontal='left',   vertical='center')
+
+    borde = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
+    )
+
+    fill_header   = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_area     = PatternFill(start_color='243B67', end_color='243B67', fill_type='solid')
+    fill_subtotal = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
+    fill_total    = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_alt      = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
+
+    fnt_white = Font(bold=True, size=10, color='FFFFFF')
+    fnt_gold  = Font(bold=True, size=10, color='F4B41A')
+    fnt_deudor   = Font(bold=True, size=10, color='1E40AF')
+    fnt_acreedor = Font(bold=True, size=10, color='065F46')
+
+    ws.column_dimensions['A'].width = 50
+    ws.column_dimensions['B'].width = 16
+    ws.column_dimensions['C'].width = 16
+    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['E'].width = 16
+    ws.column_dimensions['F'].width = 6
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    fila = 1
+
+    def merge(r, val, fuente, relleno, altura=14):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        cl = ws.cell(row=r, column=1, value=val)
+        cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
+        for c in range(1, 7): ws.cell(row=r, column=c).border = borde
+        ws.row_dimensions[r].height = altura
+
+    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None):
+        cl = ws.cell(row=r, column=c, value=val)
+        if fuente:  cl.font      = fuente
+        if aln:     cl.alignment = aln
+        if relleno: cl.fill      = relleno
+        if fmt:     cl.number_format = fmt
+        cl.border = borde
+        return cl
+
+    merge(fila, 'BALANCE DE SALDOS', fnt_titulo, PatternFill(fill_type=None), 18); fila += 1
+    merge(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None)); fila += 1
+    merge(fila,
+        f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — "
+        f"Período: {periodo.nombre} — (Expresado en Quetzales)",
+        Font(size=9), PatternFill(fill_type=None), 12)
+    fila += 2
+
+    # Encabezados de columna
+    for c, txt in enumerate(['NOMBRE DE LA CUENTA', 'DEBE', 'HABER', 'SALDO DEUDOR', 'SALDO ACREEDOR', 'N'], 1):
+        cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_header)
+    ws.row_dimensions[fila].height = 14; fila += 1
+
+    for grupo in grupos:
+        # Encabezado área
+        merge(fila, grupo['area'].nombre.upper(), fnt_gold, fill_area, 13); fila += 1
+
+        for i, c in enumerate(grupo['cuentas']):
+            rf = fill_alt if i % 2 == 1 else None
+            cel(fila, 1, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
+            cel(fila, 2, float(c['debe_total']),  fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 3, float(c['haber_total']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            if c['naturaleza'] == 'D':
+                cel(fila, 4, float(c['saldo']), fuente=fnt_deudor, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                cel(fila, 5, '', relleno=rf)
+            else:
+                cel(fila, 4, '', relleno=rf)
+                cel(fila, 5, float(c['saldo']), fuente=fnt_acreedor, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 6, c['naturaleza'], fuente=fnt_deudor if c['naturaleza'] == 'D' else fnt_acreedor, aln=aln_center, relleno=rf)
+            fila += 1
+
+        # Subtotal
+        cel(fila, 1, f"Subtotal {grupo['area'].nombre}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal)
+        cel(fila, 2, float(grupo['subtotal_debe']),           fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
+        cel(fila, 3, float(grupo['subtotal_haber']),          fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
+        cel(fila, 4, float(grupo['subtotal_saldo_deudor']),   fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
+        cel(fila, 5, float(grupo['subtotal_saldo_acreedor']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
+        cel(fila, 6, '', relleno=fill_subtotal)
+        fila += 2
+
+    # Totales generales
+    cel(fila, 1, 'TOTALES GENERALES', fuente=fnt_white, aln=aln_right, relleno=fill_total)
+    cel(fila, 2, float(totales['total_debe']),           fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+    cel(fila, 3, float(totales['total_haber']),          fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+    cel(fila, 4, float(totales['total_saldo_deudor']),   fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+    cel(fila, 5, float(totales['total_saldo_acreedor']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+    cel(fila, 6, '✓' if totales['cuadrado'] else '✗',   fuente=fnt_white, aln=aln_center, relleno=fill_total)
+
+    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage   = True
+    ws.page_setup.fitToWidth  = 1
+
+    nombre = f"BalanceSaldos_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def balance_saldos_pdf(request):
+    from io import BytesIO
+    from decimal import Decimal
+    try:
+        from xhtml2pdf import pisa
+    except ImportError:
+        messages.error(request, 'xhtml2pdf no está instalado.')
+        return redirect('balance_saldos')
+
+    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not grupos:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('balance_saldos')
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    cuadrado_txt = 'CUADRADO' if totales['cuadrado'] else 'NO CUADRA'
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
+  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
+  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
+  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
+  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  table {{ width: 100%; border-collapse: collapse; }}
+  th {{ background-color: #1B2B4E; color: white; font-size: 7.5pt; padding: 3px 5px;
+        border: 0.5pt solid #000; text-align: center; font-weight: bold; }}
+  td {{ border: 0.5pt solid #94a3b8; padding: 2px 5px; vertical-align: middle; font-size: 7.5pt; }}
+  .col-cuenta {{ text-align: left; }}
+  .col-monto  {{ width: 65pt; text-align: right; }}
+  .col-nat    {{ width: 18pt; text-align: center; font-weight: bold; }}
+  .row-area td {{ background-color: #243B67; color: #F4B41A; font-weight: bold;
+                  font-size: 8pt; border-top: 1pt solid #C5A028; padding: 3px 5px; }}
+  .row-alt td  {{ background-color: #F9FAFB; }}
+  .row-sub td  {{ background-color: #E5E7EB; font-weight: bold;
+                  border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
+  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold;
+                   border-top: 1.5pt solid #C5A028; }}
+  .d {{ color: #1E40AF; font-weight: bold; }}
+  .a {{ color: #065F46; font-weight: bold; }}
+</style></head><body>
+<h1>BALANCE DE SALDOS</h1>
+<h2>{nombre_empresa}</h2>
+<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
+Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash; {cuadrado_txt}</h3>
+<table>
+<thead>
+  <tr>
+    <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
+    <th class="col-monto">DEBE</th>
+    <th class="col-monto">HABER</th>
+    <th class="col-monto">SALDO DEUDOR</th>
+    <th class="col-monto">SALDO ACREEDOR</th>
+    <th class="col-nat">N</th>
+  </tr>
+</thead>
+<tbody>
+"""
+    for grupo in grupos:
+        html += f'<tr class="row-area"><td colspan="6">{grupo["area"].nombre.upper()}</td></tr>'
+
+        for j, c in enumerate(grupo['cuentas']):
+            cls = 'row-alt' if j % 2 == 1 else ''
+            s_d = f"{c['saldo']:,.2f}" if c['naturaleza'] == 'D' else ''
+            s_a = f"{c['saldo']:,.2f}" if c['naturaleza'] == 'A' else ''
+            nat_cls = 'd' if c['naturaleza'] == 'D' else 'a'
+            html += f"""<tr class="{cls}">
+  <td class="col-cuenta">{c['cuenta'].nombre}</td>
+  <td class="col-monto">{c['debe_total']:,.2f}</td>
+  <td class="col-monto">{c['haber_total']:,.2f}</td>
+  <td class="col-monto {nat_cls if c['naturaleza']=='D' else ''}">{s_d}</td>
+  <td class="col-monto {nat_cls if c['naturaleza']=='A' else ''}">{s_a}</td>
+  <td class="col-nat {nat_cls}">{c['naturaleza']}</td>
+</tr>"""
+
+        html += f"""<tr class="row-sub">
+  <td class="col-cuenta" style="text-align:right;">Subtotal {grupo['area'].nombre}</td>
+  <td class="col-monto">{grupo['subtotal_debe']:,.2f}</td>
+  <td class="col-monto">{grupo['subtotal_haber']:,.2f}</td>
+  <td class="col-monto">{grupo['subtotal_saldo_deudor']:,.2f}</td>
+  <td class="col-monto">{grupo['subtotal_saldo_acreedor']:,.2f}</td>
+  <td class="col-nat"></td>
+</tr>"""
+
+    html += f"""<tr class="row-total">
+  <td class="col-cuenta" style="text-align:right;">TOTALES GENERALES</td>
+  <td class="col-monto">{totales['total_debe']:,.2f}</td>
+  <td class="col-monto">{totales['total_haber']:,.2f}</td>
+  <td class="col-monto">{totales['total_saldo_deudor']:,.2f}</td>
+  <td class="col-monto">{totales['total_saldo_acreedor']:,.2f}</td>
+  <td class="col-nat">{'OK' if totales['cuadrado'] else 'ERR'}</td>
+</tr>
+</tbody></table></body></html>"""
+
+    buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+    if pisa_status.err:
+        messages.error(request, 'Error al generar el PDF')
+        return redirect('balance_saldos')
+
+    buffer.seek(0)
+    nombre = f"BalanceSaldos_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.pdf"
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+# ==================== LIBRO MAYOR ====================
+
+def _get_libro_mayor_datos(request):
+    from administracion.services.libro_mayor_service import LibroMayorService
+
+    empresa_activa_id = request.session.get('empresa_activa_id')
+    empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
+
+    if not empresa_activa_id or not empresa_periodo_activo_id:
+        return None, None, None, None, None, None
+
+    try:
+        empresa = Empresa.objects.get(id=empresa_activa_id)
+        empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
+        periodo = empresa_periodo.id_periodo
+    except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
+        return None, None, None, None, None, None
+
+    fecha_desde = request.GET.get('fecha_desde')
+    fecha_hasta = request.GET.get('fecha_hasta')
+
+    try:
+        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
+    except ValueError:
+        fecha_desde = periodo.fecha_inicial
+
+    try:
+        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
+    except ValueError:
+        fecha_hasta = periodo.fecha_final
+
+    bloques = LibroMayorService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
+    paginas = LibroMayorService.paginar(bloques)
+
+    return empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas
+
+
+@login_required
+def libro_mayor(request):
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not bloques:
+        return render(request, 'administracion/reportes/libro_mayor.html', {
+            'sin_datos': True,
+            'empresa': empresa,
+            'periodo': periodo,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+        })
+
+    return render(request, 'administracion/reportes/libro_mayor.html', {
+        'sin_datos': False,
+        'empresa': empresa,
+        'periodo': periodo,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+        'paginas': paginas,
+        'total_cuentas': len(bloques),
+        'fecha_reporte': timezone.now(),
+    })
+
+
+@login_required
+def libro_mayor_excel(request):
+    from decimal import Decimal
+
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not bloques:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('libro_mayor')
+
+    wb = Workbook()
+    ws = wb.active
+    ws.title = "Libro Mayor"
+
+    fnt_titulo  = Font(bold=True, size=13)
+    fnt_bold    = Font(bold=True, size=10)
+    fnt_normal  = Font(size=10)
+    fnt_italica = Font(size=9, italic=True, color='555555')
+
+    aln_center = Alignment(horizontal='center', vertical='center')
+    aln_right  = Alignment(horizontal='right',  vertical='center')
+    aln_left   = Alignment(horizontal='left',   vertical='center', wrap_text=True)
+
+    borde = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'),  bottom=Side(style='thin')
+    )
+
+    fill_cuenta  = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
+    fill_col_hdr = PatternFill(start_color='243B67', end_color='243B67', fill_type='solid')
+    fill_total   = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
+    fill_ant     = PatternFill(start_color='F1F5F9', end_color='F1F5F9', fill_type='solid')
+    fill_alt     = PatternFill(start_color='FAFAFA', end_color='FAFAFA', fill_type='solid')
+
+    fnt_white = Font(bold=True, size=10, color='FFFFFF')
+    fnt_gold  = Font(bold=True, size=11, color='F4B41A')
+
+    ws.column_dimensions['A'].width = 14
+    ws.column_dimensions['B'].width = 10
+    ws.column_dimensions['C'].width = 50
+    ws.column_dimensions['D'].width = 16
+    ws.column_dimensions['E'].width = 16
+    ws.column_dimensions['F'].width = 16
+
+    fila = 1
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+
+    def merge_row(r, valor, fuente, relleno, altura=14):
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        cl = ws.cell(row=r, column=1, value=valor)
+        cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
+        for c in range(1, 7): ws.cell(row=r, column=c).border = borde
+        ws.row_dimensions[r].height = altura
+
+    def cel(r, c, valor='', fuente=None, aln=None, relleno=None, fmt=None):
+        cl = ws.cell(row=r, column=c, value=valor)
+        if fuente:  cl.font      = fuente
+        if aln:     cl.alignment = aln
+        if relleno: cl.fill      = relleno
+        if fmt:     cl.number_format = fmt
+        cl.border = borde
+        return cl
+
+    merge_row(fila, 'LIBRO MAYOR', fnt_titulo, PatternFill(fill_type=None), 18); fila += 1
+    merge_row(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None)); fila += 1
+    merge_row(fila,
+        f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — "
+        f"Período: {periodo.nombre} — (Expresado en Quetzales)",
+        Font(size=9), PatternFill(fill_type=None), 12)
+    fila += 2
+
+    for bloque in bloques:
+        cuenta = bloque['cuenta']
+        nombre_cuenta = f"{cuenta.id_area_contable.nombre} › {cuenta.id_subgrupo.nombre} › {cuenta.nombre}"
+
+        merge_row(fila, nombre_cuenta, fnt_gold, fill_cuenta, 15); fila += 1
+
+        for c, txt in enumerate(['FECHA', 'PARTIDA', 'DESCRIPCIÓN', 'DEBE', 'HABER', 'SALDO'], 1):
+            cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_col_hdr)
+        ws.row_dimensions[fila].height = 14; fila += 1
+
+        if bloque['saldo_anterior'] != Decimal('0'):
+            cel(fila, 1, '', relleno=fill_ant)
+            cel(fila, 2, '', relleno=fill_ant)
+            cel(fila, 3, f"Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}", fuente=fnt_italica, aln=aln_left, relleno=fill_ant)
+            cel(fila, 4, '', relleno=fill_ant)
+            cel(fila, 5, '', relleno=fill_ant)
+            cel(fila, 6, float(bloque['saldo_anterior']), fuente=fnt_bold, aln=aln_right, relleno=fill_ant, fmt='#,##0.00')
+            fila += 1
+
+        for i, f_mov in enumerate(bloque['filas']):
+            rf = fill_alt if i % 2 == 1 else None
+            cel(fila, 1, f_mov['texto_fecha'],  fuente=fnt_normal, aln=aln_center, relleno=rf)
+            cel(fila, 2, f_mov['correlativo'],  fuente=fnt_normal, aln=aln_center, relleno=rf)
+            cel(fila, 3, f_mov['descripcion'],  fuente=fnt_normal, aln=aln_left,   relleno=rf)
+            cel(fila, 4, float(f_mov['debe'])  if f_mov['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 5, float(f_mov['haber']) if f_mov['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 6, float(f_mov['saldo']), fuente=fnt_bold, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            fila += 1
+
+        cel(fila, 1, '', relleno=fill_total)
+        cel(fila, 2, '', relleno=fill_total)
+        cel(fila, 3, 'TOTALES', fuente=fnt_bold, aln=aln_right, relleno=fill_total)
+        cel(fila, 4, float(bloque['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        cel(fila, 5, float(bloque['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        cel(fila, 6, float(bloque['saldo_final']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        fila += 2
+
+    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.fitToPage   = True
+    ws.page_setup.fitToWidth  = 1
+
+    nombre = f"LibroMayor_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
+    response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    wb.save(response)
+    return response
+
+
+@login_required
+def libro_mayor_pdf(request):
+    from io import BytesIO
+    from decimal import Decimal
+    try:
+        from xhtml2pdf import pisa
+    except ImportError:
+        messages.error(request, 'xhtml2pdf no está instalado.')
+        return redirect('libro_mayor')
+
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+
+    if empresa is None:
+        messages.warning(request, 'Debe seleccionar una empresa y un período activo')
+        return redirect('home')
+
+    if not bloques:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('libro_mayor')
+
+    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8">
+<style>
+  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
+  body {{ font-family: Courier, monospace; font-size: 7.5pt; color: #000; }}
+  .page-break {{ page-break-before: always; }}
+  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
+  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
+  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 10pt; }}
+  .hdr-cuenta td {{ background-color: #1B2B4E; color: #F4B41A; font-weight: bold;
+                    font-size: 8pt; padding: 4px 6px;
+                    border-top: 1pt solid #C5A028; border-bottom: 1pt solid #C5A028; }}
+  th {{ background-color: #243B67; color: white; font-size: 7pt; padding: 3px 4px;
+        border: 0.5pt solid #000; text-align: center; }}
+  td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; vertical-align: middle; }}
+  .col-fecha   {{ width: 55pt; text-align: center; }}
+  .col-partida {{ width: 40pt; text-align: center; }}
+  .col-desc    {{ text-align: left; }}
+  .col-monto   {{ width: 60pt; text-align: right; }}
+  .col-saldo   {{ width: 65pt; text-align: right; font-weight: bold; }}
+  .row-ant td  {{ background-color: #F1F5F9; font-style: italic; color: #475569; }}
+  .row-alt td  {{ background-color: #FAFAFA; }}
+  .row-total td {{ background-color: #E5E7EB; font-weight: bold;
+                   border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
+</style></head><body>
+"""
+
+    for i, pagina in enumerate(paginas):
+        if i > 0:
+            html += '<div class="page-break"></div>'
+
+        html += f"""
+<h1>LIBRO MAYOR</h1>
+<h2>{nombre_empresa}</h2>
+<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
+Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash;
+Pagina {pagina['numero']} de {len(paginas)}</h3>
+"""
+        for bloque in pagina['bloques']:
+            cuenta = bloque['cuenta']
+            nombre_cuenta = (
+                f"{cuenta.id_area_contable.nombre} &rsaquo; "
+                f"{cuenta.id_subgrupo.nombre} &rsaquo; "
+                f"<strong>{cuenta.nombre}</strong>"
+            )
+            html += f"""<table>
+<tr class="hdr-cuenta"><td colspan="6">{nombre_cuenta}</td></tr>
+<tr>
+  <th class="col-fecha">FECHA</th>
+  <th class="col-partida">PARTIDA</th>
+  <th class="col-desc">DESCRIPCION</th>
+  <th class="col-monto">DEBE</th>
+  <th class="col-monto">HABER</th>
+  <th class="col-saldo">SALDO</th>
+</tr>
+"""
+            if bloque['saldo_anterior'] != Decimal('0'):
+                html += f"""<tr class="row-ant">
+  <td class="col-fecha"></td><td class="col-partida"></td>
+  <td class="col-desc">Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}</td>
+  <td class="col-monto"></td><td class="col-monto"></td>
+  <td class="col-saldo">{bloque['saldo_anterior']:,.2f}</td>
+</tr>"""
+
+            for j, fila in enumerate(bloque['filas']):
+                cls   = 'row-alt' if j % 2 == 1 else ''
+                debe  = f"{fila['debe']:,.2f}"  if fila['debe']  > 0 else ''
+                haber = f"{fila['haber']:,.2f}" if fila['haber'] > 0 else ''
+                html += f"""<tr class="{cls}">
+  <td class="col-fecha">{fila['texto_fecha']}</td>
+  <td class="col-partida">{fila['correlativo']}</td>
+  <td class="col-desc">{fila['descripcion']}</td>
+  <td class="col-monto">{debe}</td>
+  <td class="col-monto">{haber}</td>
+  <td class="col-saldo">{fila['saldo']:,.2f}</td>
+</tr>"""
+
+            html += f"""<tr class="row-total">
+  <td class="col-fecha"></td><td class="col-partida"></td>
+  <td class="col-desc" style="text-align:right;">TOTALES</td>
+  <td class="col-monto">{bloque['total_debe']:,.2f}</td>
+  <td class="col-monto">{bloque['total_haber']:,.2f}</td>
+  <td class="col-saldo">{bloque['saldo_final']:,.2f}</td>
+</tr></table>"""
+
+    html += '</body></html>'
+
+    buffer = BytesIO()
+    pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
+    if pisa_status.err:
+        messages.error(request, 'Error al generar el PDF')
+        return redirect('libro_mayor')
+
+    buffer.seek(0)
+    nombre = f"LibroMayor_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.pdf"
+    response = HttpResponse(buffer, content_type='application/pdf')
+    response['Content-Disposition'] = f'attachment; filename="{nombre}"'
+    return response
+
+
+
+def migrar_catalogos_view(request):
+    if not request.user.is_superuser:
+        return render(request, 'administracion/migrar_catalogos.html', {
+            'error': 'Solo los administradores pueden ejecutar esta acción.',
+            'ejecutado': False,
+        })
+
+    if request.method == 'POST':
+        from io import StringIO, TextIOWrapper
+        from django.core.management import call_command
+        accion = request.POST.get('accion', 'catalogos')
+        output = StringIO()
+        error = None
+
+        try:
+            if accion == 'asientos':
+                f_asiento   = request.FILES.get('csv_asiento')
+                f_movimiento = request.FILES.get('csv_movimiento')
+                f_detalle   = request.FILES.get('csv_detalle')
+
+                if not f_asiento or not f_movimiento or not f_detalle:
+                    error = 'Debe subir los tres archivos CSV para migrar asientos.'
+                else:
+                    call_command(
+                        'migrar_asientos',
+                        stdout=output,
+                        stderr=output,
+                        asiento_file=f_asiento,
+                        movimiento_file=f_movimiento,
+                        detalle_file=f_detalle,
+                    )
+            else:
+                call_command('migrar_catalogos', stdout=output, stderr=output)
+        except Exception as e:
+            error = str(e)
+
+        log = output.getvalue()
+        return render(request, 'administracion/migrar_catalogos.html', {
+            'ejecutado': True,
+            'accion': accion,
+            'log': log,
+            'error': error,
+        })
+
+    return render(request, 'administracion/migrar_catalogos.html', {'ejecutado': False})

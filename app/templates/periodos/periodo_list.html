@@ -337,8 +337,8 @@
                         <span class="status-closed"><i class="fa fa-circle" style="font-size: 8px;"></i> Cerrado</span>
                     {% endif %}
                 </td>
-                <td>{{ periodo.creado_por.get_full_name|default:periodo.creado_por.username|default:"-" }}</td>
-                <td>{{ periodo.modificado_por.get_full_name|default:periodo.modificado_por.username|default:"-" }}</td>
+                <td>{% if periodo.creado_por %}{{ periodo.creado_por.get_full_name|default:periodo.creado_por.username }}{% else %}-{% endif %}</td>
+                <td>{% if periodo.modificado_por %}{{ periodo.modificado_por.get_full_name|default:periodo.modificado_por.username }}{% else %}-{% endif %}</td>
                 <td>{{ periodo.fecha_creacion|date:"d/m/Y H:i" }}</td>
                 <td>
                     <div class="action-buttons">

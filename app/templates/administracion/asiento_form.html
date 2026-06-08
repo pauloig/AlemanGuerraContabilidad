@@ -576,6 +576,11 @@
                             <button type="button" class="btn-submit" onclick="agregarDetalle()" style="width: 100%;">Agregar</button>
                         </div>
                     </div>
+                    <div class="row" style="margin-top: 8px;">
+                        <div class="col-md-12">
+                            <input type="text" id="detalleDescripcion" class="form-control-custom" placeholder="Descripción (opcional)">
+                        </div>
+                    </div>
                 </div>
                 
                 <hr>
@@ -1156,7 +1161,7 @@
                         const div = document.createElement('div');
                         div.className = 'detail-item';
                         div.innerHTML = `
-                            <span><strong>${detalle.nombre}</strong></span>
+                            <span><strong>${detalle.nombre}</strong>${detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${detalle.descripcion}</span>` : ''}</span>
                             <span>Q ${detalle.monto.toFixed(2)}</span>
                             <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})">
                                 <i class="fas fa-trash-alt"></i>
@@ -1195,13 +1200,15 @@
             return;
         }
         
+        const descripcion = document.getElementById('detalleDescripcion').value;
+
         fetch('/administracion/api/detalle/crear/', {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
                 'X-CSRFToken': getCookie('csrftoken')
             },
-            body: `movimiento_id=${movimientoIdActual}&nombre=${encodeURIComponent(nombre)}&monto=${monto}`
+            body: `movimiento_id=${movimientoIdActual}&nombre=${encodeURIComponent(nombre)}&descripcion=${encodeURIComponent(descripcion)}&monto=${monto}`
         })
         .then(response => response.json())
         .then(data => {
@@ -1214,7 +1221,7 @@
                 const newDetail = document.createElement('div');
                 newDetail.className = 'detail-item';
                 newDetail.innerHTML = `
-                    <span><strong>${data.detalle.nombre}</strong></span>
+                    <span><strong>${data.detalle.nombre}</strong>${data.detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${data.detalle.descripcion}</span>` : ''}</span>
                     <span>Q ${data.detalle.monto.toFixed(2)}</span>
                     <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${data.detalle.id})">
                         <i class="fas fa-trash-alt"></i>
@@ -1230,6 +1237,7 @@
                 document.getElementById('detalleNombre').value = '';
                 document.getElementById('detalleNombre').style.display = 'none';
                 document.getElementById('detalleMonto').value = '';
+                document.getElementById('detalleDescripcion').value = '';
                 
                 if (data.detalles_completos) {
                     const row = document.querySelector(`#movimientosBody tr[data-id="${movimientoIdActual}"]`);

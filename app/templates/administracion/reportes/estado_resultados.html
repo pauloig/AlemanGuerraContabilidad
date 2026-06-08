@@ -1,0 +1,326 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load contabilidad_filters %}
+
+{% block page_title_icon %}<i class="fas fa-chart-line"></i>{% endblock %}
+{% block page_title %}Estado de Resultados{% endblock %}
+
+{% block content %}
+<style>
+    .filters-panel {
+        background: white; border-radius: 20px; padding: 20px;
+        margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .filter-group { margin-bottom: 15px; }
+    .filter-group label {
+        display: block; margin-bottom: 5px;
+        font-weight: 600; color: #0A1628; font-size: 12px;
+    }
+    .filter-control {
+        width: 100%; padding: 8px 12px;
+        border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px;
+    }
+    .btn-filter {
+        background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+        color: #0A1628; border: none; padding: 8px 20px;
+        border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;
+    }
+    .btn-export {
+        color: white; border: none; padding: 8px 20px; border-radius: 10px;
+        font-weight: 600; text-decoration: none; display: inline-block;
+    }
+    .btn-export:hover { color: white; opacity: 0.9; }
+
+    .er-wrapper {
+        background: white; border-radius: 12px; padding: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+        max-width: 700px; margin: 0 auto;
+    }
+    .er-table {
+        width: 100%; border-collapse: collapse;
+        font-family: 'Courier New', monospace; font-size: 11px;
+    }
+    .er-table td {
+        border: 1px solid #000; padding: 3px 8px; vertical-align: middle;
+    }
+    .col-cuenta { text-align: left; }
+    .col-monto  { width: 120px; text-align: right; font-family: monospace; }
+
+    /* Encabezado de sección */
+    tr.sec-header td {
+        background: #1B2B4E; color: white;
+        font-weight: bold; font-size: 11px;
+        letter-spacing: 1px; padding: 5px 8px;
+        border-top: 2px solid #C5A028;
+    }
+    /* Encabezado de subgrupo */
+    tr.sg-header td {
+        background: #EEF2F7; color: #1B2B4E;
+        font-weight: bold; font-size: 10px;
+        border-top: 1px solid #94a3b8;
+        border-bottom: 1px solid #94a3b8;
+        padding: 3px 10px;
+    }
+    /* Fila de cuenta */
+    tr.cuenta-row td.col-cuenta { padding-left: 20px; }
+    tr.cuenta-row:nth-child(even) td { background: #f9fafb; }
+
+    /* Subtotal de subgrupo */
+    tr.sg-total td {
+        background: #e5e7eb; font-weight: bold;
+        border-top: 1px solid #000;
+        font-size: 10px;
+    }
+    tr.sg-total td.col-cuenta { text-align: right; padding-right: 10px; }
+
+    /* Total de sección */
+    tr.sec-total td {
+        background: #d1d5db; font-weight: bold;
+        border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
+        font-size: 11px;
+    }
+    tr.sec-total td.col-cuenta { text-align: right; }
+
+    /* Separador */
+    tr.separador td { border: none; height: 8px; background: white; }
+
+    /* Resultado final */
+    tr.resultado-row td {
+        font-weight: bold; font-size: 12px;
+        border-top: 2px solid #000; border-bottom: 3px double #000;
+        padding: 6px 8px;
+    }
+    tr.resultado-row.utilidad td { background: #d1fae5; color: #065f46; }
+    tr.resultado-row.perdida  td { background: #fee2e2; color: #991b1b; }
+    tr.resultado-row td.col-cuenta { text-align: right; }
+
+    .info-box {
+        background: #f8fafc; border-left: 4px solid #C5A028;
+        padding: 12px 15px; margin-bottom: 20px; border-radius: 8px; font-size: 13px;
+    }
+    .empty-state { text-align: center; padding: 60px 20px; }
+
+    .btn-ir-filtros {
+        position: fixed; bottom: 30px; right: 30px;
+        background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+        color: #0A1628; border: none; width: 46px; height: 46px;
+        border-radius: 50%; font-size: 18px; cursor: pointer;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        display: flex; align-items: center; justify-content: center;
+        text-decoration: none; transition: all 0.3s; z-index: 100;
+    }
+    .btn-ir-filtros:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(197,160,40,0.4); color: #0A1628;
+    }
+    .spinner-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(10,22,40,0.55); z-index: 9999;
+        flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .spinner-overlay.activo { display: flex; }
+    .spinner-circulo {
+        width: 56px; height: 56px;
+        border: 5px solid rgba(244,180,26,0.3); border-top-color: #F4B41A;
+        border-radius: 50%; animation: girar 0.8s linear infinite;
+    }
+    .spinner-texto { color: white; font-size: 14px; font-weight: 600; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+
+    @media print {
+        .no-print { display: none !important; }
+        .er-wrapper { box-shadow: none; padding: 10px 0; max-width: 100%; }
+        tr.sec-header td, tr.resultado-row td {
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+    }
+</style>
+
+<div class="form-container">
+
+    <div class="filters-panel no-print" id="filtros">
+        <form method="GET">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="filter-group">
+                        <label><i class="fas fa-building"></i> Empresa</label>
+                        <input type="text" class="filter-control"
+                               value="{{ empresa.nombre_comercial|default:empresa.razon_social }}" disabled>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="filter-group">
+                        <label><i class="fas fa-calendar-alt"></i> Período</label>
+                        <input type="text" class="filter-control" value="{{ periodo.nombre }}" disabled>
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="filter-group">
+                        <label><i class="fas fa-calendar-day"></i> Fecha Desde</label>
+                        <input type="date" name="fecha_desde" class="filter-control"
+                               value="{{ fecha_desde|date:'Y-m-d' }}">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="filter-group">
+                        <label><i class="fas fa-calendar-day"></i> Fecha Hasta</label>
+                        <input type="date" name="fecha_hasta" class="filter-control"
+                               value="{{ fecha_hasta|date:'Y-m-d' }}">
+                    </div>
+                </div>
+                <div class="col-md-2">
+                    <div class="filter-group" style="padding-top:20px;">
+                        <button type="submit" class="btn-filter">
+                            <i class="fas fa-search"></i> Aplicar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12 text-right">
+                    <a href="{% url 'estado_resultados_excel' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                       class="btn-export" style="background:#1e7e34;margin-right:8px;"
+                       onclick="mostrarSpinner('Generando Excel...')">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{% url 'estado_resultados_pdf' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                       class="btn-export" style="background:#b91c1c;"
+                       onclick="mostrarSpinner('Generando PDF...')">
+                        <i class="fas fa-print"></i> Imprimir
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if sin_datos %}
+    <div class="empty-state">
+        <i class="fas fa-chart-line" style="font-size:48px;color:#C5A028;margin-bottom:16px;display:block;"></i>
+        <h4>No hay datos para mostrar</h4>
+        <p>No hay asientos finalizados en el período seleccionado.</p>
+    </div>
+    {% else %}
+
+    <div class="info-box no-print">
+        <i class="fas fa-info-circle"></i>
+        Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} &nbsp;|&nbsp;
+        Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+    </div>
+
+    <div class="er-wrapper">
+
+        <div style="text-align:center;margin-bottom:16px;">
+            <strong style="font-family:monospace;font-size:14px;color:#0A1628;">ESTADO DE RESULTADOS</strong><br>
+            <span style="font-family:monospace;font-size:11px;">
+                {{ empresa.nombre_comercial|default:empresa.razon_social }}
+            </span><br>
+            <span style="font-family:monospace;font-size:10px;color:#475569;">
+                Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+                &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
+            </span>
+        </div>
+
+        <table class="er-table">
+            <tbody>
+
+                <!-- INGRESOS -->
+                <tr class="sec-header">
+                    <td class="col-cuenta" colspan="2">INGRESOS</td>
+                </tr>
+                {% for grupo in datos.ingresos.grupos %}
+                {% if grupo.cuentas|length > 1 %}
+                <tr class="sg-header">
+                    <td colspan="2">{{ grupo.nombre }}</td>
+                </tr>
+                {% endif %}
+                {% for c in grupo.cuentas %}
+                <tr class="cuenta-row">
+                    <td class="col-cuenta">{{ c.cuenta.nombre }}</td>
+                    <td class="col-monto">{{ c.monto|monto }}</td>
+                </tr>
+                {% endfor %}
+                {% if grupo.cuentas|length > 1 %}
+                <tr class="sg-total">
+                    <td class="col-cuenta">Subtotal {{ grupo.nombre }}</td>
+                    <td class="col-monto">{{ grupo.subtotal|monto }}</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+                <tr class="sec-total">
+                    <td class="col-cuenta">TOTAL INGRESOS</td>
+                    <td class="col-monto">{{ datos.ingresos.total|monto }}</td>
+                </tr>
+
+                <tr class="separador"><td colspan="2"></td></tr>
+
+                <!-- EGRESOS -->
+                <tr class="sec-header">
+                    <td class="col-cuenta" colspan="2">EGRESOS</td>
+                </tr>
+                {% for grupo in datos.egresos.grupos %}
+                {% if grupo.cuentas|length > 1 %}
+                <tr class="sg-header">
+                    <td colspan="2">{{ grupo.nombre }}</td>
+                </tr>
+                {% endif %}
+                {% for c in grupo.cuentas %}
+                <tr class="cuenta-row">
+                    <td class="col-cuenta">{{ c.cuenta.nombre }}</td>
+                    <td class="col-monto">{{ c.monto|monto }}</td>
+                </tr>
+                {% endfor %}
+                {% if grupo.cuentas|length > 1 %}
+                <tr class="sg-total">
+                    <td class="col-cuenta">Subtotal {{ grupo.nombre }}</td>
+                    <td class="col-monto">{{ grupo.subtotal|monto }}</td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+                <tr class="sec-total">
+                    <td class="col-cuenta">TOTAL EGRESOS</td>
+                    <td class="col-monto">{{ datos.egresos.total|monto }}</td>
+                </tr>
+
+                <tr class="separador"><td colspan="2"></td></tr>
+
+                <!-- RESULTADO -->
+                <tr class="resultado-row {% if datos.es_utilidad %}utilidad{% else %}perdida{% endif %}">
+                    <td class="col-cuenta">
+                        {% if datos.es_utilidad %}UTILIDAD DEL EJERCICIO{% else %}PÉRDIDA DEL EJERCICIO{% endif %}
+                    </td>
+                    <td class="col-monto">
+                        {% if not datos.es_utilidad %}({% endif %}{{ datos.utilidad|monto }}{% if not datos.es_utilidad %}){% endif %}
+                    </td>
+                </tr>
+
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+</div>
+
+<div class="spinner-overlay no-print" id="spinnerOverlay">
+    <div class="spinner-circulo"></div>
+    <div class="spinner-texto" id="spinnerTexto">Generando archivo...</div>
+</div>
+
+<a href="#filtros" class="btn-ir-filtros no-print" title="Ir a filtros">
+    <i class="fas fa-sliders-h"></i>
+</a>
+
+<script>
+function mostrarSpinner(texto) {
+    document.getElementById('spinnerTexto').innerText = texto;
+    document.getElementById('spinnerOverlay').classList.add('activo');
+    setTimeout(function() {
+        document.getElementById('spinnerOverlay').classList.remove('activo');
+    }, 30000);
+}
+window.addEventListener('focus', function() {
+    document.getElementById('spinnerOverlay').classList.remove('activo');
+});
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) document.getElementById('spinnerOverlay').classList.remove('activo');
+});
+</script>
+{% endblock %}

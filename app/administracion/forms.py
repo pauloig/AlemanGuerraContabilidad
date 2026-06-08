@@ -94,7 +94,7 @@ class EmpresaForm(forms.ModelForm):
             'direccion_comercial': 'Dirección Comercial',
             'propietario': 'Propietario/Representante',
             'es_sociedad': '¿Es Sociedad?',
-            'fecha_vencimiento': 'Fecha de Vencimiento',
+            'fecha_vencimiento': 'Fecha de Vigencia',
         }
     
     def clean_nit(self):
@@ -110,11 +110,6 @@ class EmpresaForm(forms.ModelForm):
     
     def clean(self):
         cleaned_data = super().clean()
-        fecha_vencimiento = cleaned_data.get('fecha_vencimiento')
-        
-        if fecha_vencimiento and fecha_vencimiento < date.today():
-            raise forms.ValidationError('La fecha de vencimiento no puede ser anterior a la fecha actual.')
-        
         return cleaned_data
     
 class ProveedorForm(forms.ModelForm):
@@ -390,11 +385,15 @@ class MovimientoForm(forms.ModelForm):
 class DetalleMovimientoForm(forms.ModelForm):
     class Meta:
         model = DetalleMovimiento
-        fields = ['nombre', 'monto']
+        fields = ['nombre', 'descripcion', 'monto']
         widgets = {
             'nombre': forms.TextInput(attrs={
                 'class': 'form-control-custom',
                 'placeholder': 'Nombre del proveedor o descripción'
+            }),
+            'descripcion': forms.TextInput(attrs={
+                'class': 'form-control-custom',
+                'placeholder': 'Descripción adicional (opcional)'
             }),
             'monto': forms.NumberInput(attrs={
                 'class': 'form-control-custom detalle-monto',
@@ -404,6 +403,7 @@ class DetalleMovimientoForm(forms.ModelForm):
         }
         labels = {
             'nombre': 'Nombre/Proveedor',
+            'descripcion': 'Descripción',
             'monto': 'Monto',
         }
     

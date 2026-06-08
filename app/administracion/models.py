@@ -98,7 +98,9 @@ class Empresa(models.Model):
     )
     fecha_vencimiento = models.DateField(
         verbose_name="Fecha de Vencimiento",
-        help_text="Fecha de vencimiento de la licencia/contrato"
+        help_text="Fecha de vencimiento de la licencia/contrato",
+        null=True,
+        blank=True
     )
     
     # Auditoría
@@ -138,7 +140,9 @@ class Empresa(models.Model):
     def get_tipo_empresa(self):
         return "Sociedad" if self.es_sociedad else "Individual"
     
-    def esta_vencida(self):        
+    def esta_vencida(self):
+        if not self.fecha_vencimiento:
+            return False
         return self.fecha_vencimiento < timezone.now().date()
     
     
@@ -670,7 +674,6 @@ class Asiento(models.Model):
         verbose_name = "Asiento"
         verbose_name_plural = "Asientos"
         ordering = ['-fecha', '-correlativo']
-        unique_together = ['id_empresa_periodo', 'correlativo']
     
     def __str__(self):
         return f"Asiento #{self.correlativo} - {self.fecha}"
@@ -765,6 +768,13 @@ class DetalleMovimiento(models.Model):
     nombre = models.CharField(
         verbose_name="Nombre/Proveedor",
         max_length=200
+    )
+    descripcion = models.CharField(
+        verbose_name="Descripción",
+        max_length=500,
+        blank=True,
+        null=True,
+        help_text="Descripción adicional del detalle"
     )
     monto = models.DecimalField(
         verbose_name="Monto",

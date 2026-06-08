@@ -1,0 +1,367 @@
+{% extends 'base.html' %}
+{% load static %}
+{% load contabilidad_filters %}
+
+{% block page_title_icon %}<i class="fas fa-columns"></i>{% endblock %}
+{% block page_title %}Balance General{% endblock %}
+
+{% block content %}
+<style>
+    .filters-panel {
+        background: white; border-radius: 20px; padding: 20px;
+        margin-bottom: 25px; box-shadow: 0 4px 15px rgba(0,0,0,0.05);
+    }
+    .filter-group { margin-bottom: 15px; }
+    .filter-group label {
+        display: block; margin-bottom: 5px;
+        font-weight: 600; color: #0A1628; font-size: 12px;
+    }
+    .filter-control {
+        width: 100%; padding: 8px 12px;
+        border: 1px solid #e2e8f0; border-radius: 10px; font-size: 14px;
+    }
+    .btn-filter {
+        background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+        color: #0A1628; border: none; padding: 8px 20px;
+        border-radius: 10px; font-weight: 600; cursor: pointer; width: 100%;
+    }
+    .btn-export {
+        color: white; border: none; padding: 8px 20px; border-radius: 10px;
+        font-weight: 600; text-decoration: none; display: inline-block;
+    }
+    .btn-export:hover { color: white; opacity: 0.9; }
+
+    .balance-wrapper {
+        background: white; border-radius: 12px; padding: 25px;
+        box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow-x: auto;
+    }
+
+    /* Dos columnas lado a lado */
+    .bg-columns {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 0;
+        font-family: 'Courier New', monospace;
+        font-size: 11px;
+    }
+    .bg-col {
+        border: 1px solid #000;
+    }
+    .bg-col:first-child {
+        border-right: 2px solid #1B2B4E;
+    }
+
+    /* Encabezado de columna */
+    .col-header {
+        background: #1B2B4E; color: white;
+        font-weight: bold; text-align: center;
+        padding: 6px 8px; font-size: 12px;
+        letter-spacing: 1px;
+    }
+
+    /* Encabezado de sección (Corriente, No Corriente, etc.) */
+    .sec-header {
+        background: #EEF2F7; color: #1B2B4E;
+        font-weight: bold; padding: 4px 10px;
+        border-top: 1px solid #94a3b8;
+        border-bottom: 1px solid #94a3b8;
+        font-size: 10px; letter-spacing: 0.5px;
+    }
+
+    /* Fila de cuenta */
+    .cuenta-row {
+        display: flex; justify-content: space-between;
+        padding: 2px 10px 2px 20px; border-bottom: 1px solid #e2e8f0;
+    }
+    .cuenta-row:nth-child(even) { background: #f9fafb; }
+    .cuenta-nombre { flex: 1; }
+    .cuenta-saldo  { text-align: right; min-width: 100px; font-family: monospace; }
+
+    /* Subtotal de sección */
+    .sec-total {
+        display: flex; justify-content: space-between;
+        padding: 3px 10px; border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+        background: #e5e7eb; font-weight: bold;
+    }
+    .sec-total-label { flex: 1; }
+    .sec-total-monto { text-align: right; min-width: 100px; font-family: monospace; }
+
+    /* Utilidad/Pérdida del ejercicio */
+    .utilidad-row {
+        display: flex; justify-content: space-between;
+        padding: 3px 10px 3px 20px; border-bottom: 1px solid #e2e8f0;
+        font-weight: 700;
+    }
+    .utilidad-row.utilidad { color: #065f46; }
+    .utilidad-row.perdida  { color: #991b1b; }
+
+    /* Total general de columna */
+    .col-total {
+        display: flex; justify-content: space-between;
+        padding: 5px 10px;
+        background: #1B2B4E; color: white;
+        font-weight: bold; font-size: 11px;
+        border-top: 2px solid #C5A028;
+    }
+    .col-total-label { flex: 1; }
+    .col-total-monto { text-align: right; min-width: 100px; font-family: monospace; }
+
+    /* Espacio vacío para alinear totales */
+    .spacer { flex: 1; }
+
+    .badge-cuadrado {
+        display: inline-block; padding: 4px 12px; border-radius: 20px;
+        font-size: 12px; font-weight: 700; margin-left: 12px;
+    }
+    .badge-ok  { background: #d1fae5; color: #065f46; }
+    .badge-err { background: #fee2e2; color: #991b1b; }
+
+    .info-box {
+        background: #f8fafc; border-left: 4px solid #C5A028;
+        padding: 12px 15px; margin-bottom: 20px; border-radius: 8px; font-size: 13px;
+    }
+    .empty-state { text-align: center; padding: 60px 20px; }
+
+    .btn-ir-filtros {
+        position: fixed; bottom: 30px; right: 30px;
+        background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+        color: #0A1628; border: none; width: 46px; height: 46px;
+        border-radius: 50%; font-size: 18px; cursor: pointer;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        display: flex; align-items: center; justify-content: center;
+        text-decoration: none; transition: all 0.3s; z-index: 100;
+    }
+    .btn-ir-filtros:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(197,160,40,0.4); color: #0A1628;
+    }
+    .spinner-overlay {
+        display: none; position: fixed; inset: 0;
+        background: rgba(10,22,40,0.55); z-index: 9999;
+        flex-direction: column; align-items: center; justify-content: center; gap: 16px;
+    }
+    .spinner-overlay.activo { display: flex; }
+    .spinner-circulo {
+        width: 56px; height: 56px;
+        border: 5px solid rgba(244,180,26,0.3); border-top-color: #F4B41A;
+        border-radius: 50%; animation: girar 0.8s linear infinite;
+    }
+    .spinner-texto { color: white; font-size: 14px; font-weight: 600; }
+    @keyframes girar { to { transform: rotate(360deg); } }
+
+    @media print {
+        .no-print { display: none !important; }
+        .balance-wrapper { box-shadow: none; padding: 10px 0; }
+        .col-header, .col-total {
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+    }
+</style>
+
+<div class="form-container">
+
+    <div class="filters-panel no-print" id="filtros">
+        <form method="GET">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="filter-group">
+                        <label><i class="fas fa-building"></i> Empresa</label>
+                        <input type="text" class="filter-control"
+                               value="{{ empresa.nombre_comercial|default:empresa.razon_social }}" disabled>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="filter-group">
+                        <label><i class="fas fa-calendar-alt"></i> Período</label>
+                        <input type="text" class="filter-control" value="{{ periodo.nombre }}" disabled>
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="filter-group">
+                        <label><i class="fas fa-calendar-day"></i> Al (fecha de corte)</label>
+                        <input type="date" name="fecha_hasta" class="filter-control"
+                               value="{{ fecha_hasta|date:'Y-m-d' }}">
+                    </div>
+                </div>
+                <div class="col-md-3">
+                    <div class="filter-group" style="padding-top:20px;">
+                        <button type="submit" class="btn-filter">
+                            <i class="fas fa-search"></i> Aplicar
+                        </button>
+                    </div>
+                </div>
+            </div>
+            <div class="row mt-2">
+                <div class="col-md-12 text-right">
+                    <a href="{% url 'balance_general_excel' %}?fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                       class="btn-export" style="background:#1e7e34;margin-right:8px;"
+                       onclick="mostrarSpinner('Generando Excel...')">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{% url 'balance_general_pdf' %}?fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                       class="btn-export" style="background:#b91c1c;"
+                       onclick="mostrarSpinner('Generando PDF...')">
+                        <i class="fas fa-print"></i> Imprimir
+                    </a>
+                </div>
+            </div>
+        </form>
+    </div>
+
+    {% if sin_datos %}
+    <div class="empty-state">
+        <i class="fas fa-columns" style="font-size:48px;color:#C5A028;margin-bottom:16px;display:block;"></i>
+        <h4>No hay saldos para mostrar</h4>
+        <p>La empresa seleccionada no tiene saldos netos acumulados al {{ fecha_hasta|date:"d/m/Y" }}.</p>
+        <p style="color:#64748b;font-size:13px;">Esto ocurre cuando los asientos del período no generan saldos reales.<br>Verifique que la empresa tenga asientos de apertura de saldos.</p>
+    </div>
+    {% else %}
+
+    <div class="info-box no-print">
+        <i class="fas fa-info-circle"></i>
+        Al {{ fecha_hasta|date:"d/m/Y" }}
+        {% if datos.cuadrado %}
+        <span class="badge-cuadrado badge-ok"><i class="fas fa-check-circle"></i> Cuadrado</span>
+        {% else %}
+        <span class="badge-cuadrado badge-err">
+            <i class="fas fa-exclamation-triangle"></i> No cuadra
+            — diferencia: Q {{ diferencia|monto }}
+        </span>
+        {% endif %}
+    </div>
+
+    <div class="balance-wrapper">
+
+        <div style="text-align:center;margin-bottom:16px;">
+            <strong style="font-family:monospace;font-size:14px;color:#0A1628;">BALANCE GENERAL</strong><br>
+            <span style="font-family:monospace;font-size:11px;">
+                {{ empresa.nombre_comercial|default:empresa.razon_social }}
+            </span><br>
+            <span style="font-family:monospace;font-size:10px;color:#475569;">
+                Al {{ fecha_hasta|date:"d/m/Y" }}
+                &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
+            </span>
+        </div>
+
+        <div class="bg-columns">
+
+            <!-- COLUMNA IZQUIERDA: ACTIVO -->
+            <div class="bg-col">
+                <div class="col-header">ACTIVO</div>
+
+                {% for grupo in datos.activo.grupos %}
+                <div class="sec-header">{{ grupo.nombre|upper }}</div>
+                {% for c in grupo.cuentas %}
+                <div class="cuenta-row">
+                    <span class="cuenta-nombre">{{ c.cuenta.nombre }}</span>
+                    <span class="cuenta-saldo">{{ c.saldo|monto }}</span>
+                </div>
+                {% endfor %}
+                <div class="sec-total">
+                    <span class="sec-total-label">Total {{ grupo.nombre }}</span>
+                    <span class="sec-total-monto">{{ grupo.subtotal|monto }}</span>
+                </div>
+                {% endfor %}
+
+                <div class="col-total">
+                    <span class="col-total-label">TOTAL ACTIVO</span>
+                    <span class="col-total-monto">{{ datos.activo.total|monto }}</span>
+                </div>
+            </div>
+
+            <!-- COLUMNA DERECHA: PASIVO + CAPITAL -->
+            <div class="bg-col">
+                <div class="col-header">PASIVO</div>
+
+                {% for grupo in datos.pasivo.grupos %}
+                <div class="sec-header">{{ grupo.nombre|upper }}</div>
+                {% for c in grupo.cuentas %}
+                <div class="cuenta-row">
+                    <span class="cuenta-nombre">{{ c.cuenta.nombre }}</span>
+                    <span class="cuenta-saldo">{{ c.saldo|monto }}</span>
+                </div>
+                {% endfor %}
+                <div class="sec-total">
+                    <span class="sec-total-label">Total {{ grupo.nombre }}</span>
+                    <span class="sec-total-monto">{{ grupo.subtotal|monto }}</span>
+                </div>
+                {% endfor %}
+
+                <div class="sec-total" style="background:#d1d5db;">
+                    <span class="sec-total-label">TOTAL PASIVO</span>
+                    <span class="sec-total-monto">{{ datos.pasivo.total|monto }}</span>
+                </div>
+
+                <!-- CAPITAL -->
+                <div class="col-header" style="margin-top:4px;">CAPITAL</div>
+
+                {% for grupo in datos.capital.grupos %}
+                <div class="sec-header">{{ grupo.nombre|upper }}</div>
+                {% for c in grupo.cuentas %}
+                <div class="cuenta-row">
+                    <span class="cuenta-nombre">{{ c.cuenta.nombre }}</span>
+                    <span class="cuenta-saldo">{{ c.saldo|monto }}</span>
+                </div>
+                {% endfor %}
+                <div class="sec-total">
+                    <span class="sec-total-label">Total {{ grupo.nombre }}</span>
+                    <span class="sec-total-monto">{{ grupo.subtotal|monto }}</span>
+                </div>
+                {% endfor %}
+
+                <!-- Utilidad / Pérdida del ejercicio -->
+                <div class="utilidad-row {% if datos.capital.es_utilidad %}utilidad{% else %}perdida{% endif %}">
+                    <span class="cuenta-nombre">
+                        {% if datos.capital.es_utilidad %}
+                        Utilidad del Ejercicio
+                        {% else %}
+                        Pérdida del Ejercicio
+                        {% endif %}
+                    </span>
+                    <span class="cuenta-saldo">
+                        {% if not datos.capital.es_utilidad %}({% endif %}{{ datos.capital.utilidad_ejercicio|monto }}{% if not datos.capital.es_utilidad %}){% endif %}
+                    </span>
+                </div>
+
+                <div class="sec-total" style="background:#d1d5db;">
+                    <span class="sec-total-label">TOTAL CAPITAL</span>
+                    <span class="sec-total-monto">{{ datos.capital.total|monto }}</span>
+                </div>
+
+                <div class="col-total">
+                    <span class="col-total-label">TOTAL PASIVO + CAPITAL</span>
+                    <span class="col-total-monto">{{ datos.total_pasivo_capital|monto }}</span>
+                </div>
+            </div>
+
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+<div class="spinner-overlay no-print" id="spinnerOverlay">
+    <div class="spinner-circulo"></div>
+    <div class="spinner-texto" id="spinnerTexto">Generando archivo...</div>
+</div>
+
+<a href="#filtros" class="btn-ir-filtros no-print" title="Ir a filtros">
+    <i class="fas fa-sliders-h"></i>
+</a>
+
+<script>
+function mostrarSpinner(texto) {
+    document.getElementById('spinnerTexto').innerText = texto;
+    document.getElementById('spinnerOverlay').classList.add('activo');
+    setTimeout(function() {
+        document.getElementById('spinnerOverlay').classList.remove('activo');
+    }, 30000);
+}
+window.addEventListener('focus', function() {
+    document.getElementById('spinnerOverlay').classList.remove('activo');
+});
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) document.getElementById('spinnerOverlay').classList.remove('activo');
+});
+</script>
+{% endblock %}

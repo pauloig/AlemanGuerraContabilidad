@@ -1,27 +1,21 @@
 {% extends 'base.html' %}
 {% load static %}
+{% load contabilidad_filters %}
 
-{% block page_title_icon %}
-    <i class="fas fa-book"></i>
-{% endblock %}
-
-{% block page_title %}
-    Libro Diario
-{% endblock %}
+{% block page_title_icon %}<i class="fas fa-book"></i>{% endblock %}
+{% block page_title %}Libro Diario{% endblock %}
 
 {% block content %}
 <style>
-    /* Reset de estilos para la tabla */
     .libro-diario-wrapper {
         background: white;
-        border-radius: 20px;
+        border-radius: 12px;
         padding: 25px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
         margin-bottom: 20px;
         overflow-x: auto;
     }
-    
-    /* Tabla principal */
+
     .libro-diario-table {
         width: 100%;
         border-collapse: collapse;
@@ -30,142 +24,107 @@
         background: white;
         table-layout: fixed;
     }
-    
-    /* Anchos de columna fijos */
-    .libro-diario-table th:nth-child(1),
-    .libro-diario-table td:nth-child(1) {
-        width: 80px;
-    }
-    
-    .libro-diario-table th:nth-child(2),
-    .libro-diario-table td:nth-child(2) {
-        width: 70px;
-    }
-    
-    .libro-diario-table th:nth-child(3),
-    .libro-diario-table td:nth-child(3) {
-        width: 350px;
-    }
-    
-    .libro-diario-table th:nth-child(4),
-    .libro-diario-table td:nth-child(4) {
-        width: 100px;
-    }
-    
-    .libro-diario-table th:nth-child(5),
-    .libro-diario-table td:nth-child(5) {
-        width: 100px;
-    }
-    
-    /* Bordes de la tabla */
+
     .libro-diario-table th,
     .libro-diario-table td {
-        border: 1px solid #000000;
-        padding: 6px 8px;
-        vertical-align: top;
+        border: 1px solid #000;
+        padding: 4px 7px;
+        vertical-align: middle;
     }
-    
-    /* Encabezados */
+
     .libro-diario-table th {
         background: #1B2B4E;
         color: white;
         font-weight: bold;
         text-align: center;
-        border: 1px solid #334155;
+        border-color: #334155;
     }
-    
-    /* Celdas de fecha y asiento - centradas */
-    .libro-diario-table td:nth-child(1),
-    .libro-diario-table td:nth-child(2) {
-        text-align: center;
-        vertical-align: middle;
-    }
-    
-    /* Celdas de Debe y Haber - derecha */
-    .libro-diario-table td:nth-child(4),
-    .libro-diario-table td:nth-child(5) {
-        text-align: right;
-        font-family: monospace;
-    }
-    
+
+    .col-partida  { width: 75px;  text-align: center; }
+    .col-cuenta   { width: auto; }
+    .col-debe     { width: 115px; text-align: right; font-family: monospace; }
+    .col-haber    { width: 115px; text-align: right; font-family: monospace; }
+
     /* Separador de mes */
-    .libro-diario-table tr.separador-mes-row td {
-        background-color: #243B67;
+    tr.separador-mes-row td {
+        background: #243B67;
         color: white;
         font-weight: bold;
         text-align: center;
+        letter-spacing: 2px;
         border-top: 2px solid #C5A028;
         border-bottom: 2px solid #C5A028;
     }
-    
-    .libro-diario-table tr.separador-mes-row td:nth-child(3) {
+
+    /* Fila de fecha */
+    tr.fecha-row td {
+        background: #f1f5f9;
+        font-weight: 700;
+        color: #1B2B4E;
+        border-top: 1px solid #94a3b8;
+        border-bottom: 1px solid #94a3b8;
         text-align: center;
     }
-    
-    /* Filas de detalle (indentadas) */
-    .libro-diario-table tr.detalle-row td {
-        background-color: #f9fafb;
-    }
-    
-    .libro-diario-table tr.detalle-row td:nth-child(3) {
-        padding-left: 25px;
-        color: #4b5563;
-    }
-    
-    /* Fila de comentario con totales del asiento */
-    .libro-diario-table tr.comentario-total-row td {
-        background-color: #e5e7eb;
-        font-style: italic;
-        border-top: 1px solid #000000;
-        border-bottom: 1px solid #000000;
-    }
-    
-    .libro-diario-table tr.comentario-total-row td:nth-child(3) {
-        text-align: left;
-        padding-left: 15px;
+
+    /* Movimiento normal */
+    tr.movimiento-row td.col-partida {
         color: #1B2B4E;
+        font-weight: 700;
+        font-size: 10px;
     }
-    
-    .libro-diario-table tr.comentario-total-row td:nth-child(4),
-    .libro-diario-table tr.comentario-total-row td:nth-child(5) {
+
+    /* Detalle (indentado) */
+    tr.detalle-row td.col-cuenta {
+        padding-left: 28px;
+        color: #4b5563;
+        background: #f9fafb;
+        font-style: italic;
+    }
+
+    /* Comentario / totales del asiento */
+    tr.comentario-row td {
+        background: #e5e7eb;
+        border-top: 1px solid #000;
+        border-bottom: 2px solid #000;
+        font-style: italic;
+    }
+    tr.comentario-row td.col-cuenta {
+        color: #1B2B4E;
+        padding-left: 12px;
+    }
+    tr.comentario-row td.col-debe,
+    tr.comentario-row td.col-haber {
         font-weight: bold;
         color: #065f46;
         font-style: normal;
     }
-    
-    /* Filas VAN y VIENEN */
-    .libro-diario-table tr.van-row td,
-    .libro-diario-table tr.vienen-row td {
-        background-color: #d1d5db;
+
+    /* VAN / VIENEN */
+    tr.van-row td, tr.vienen-row td {
+        background: #d1d5db;
         font-weight: bold;
-        border-top: 2px solid #000000;
-        border-bottom: 2px solid #000000;
+        border-top: 2px solid #000;
+        border-bottom: 2px solid #000;
     }
-    
-    .libro-diario-table tr.van-row td:nth-child(3),
-    .libro-diario-table tr.vienen-row td:nth-child(3) {
-        text-align: right;
-    }
-    
-    /* Fila de totales generales */
-    .libro-diario-table tr.totales-row td {
-        background-color: #1B2B4E;
+    tr.van-row td.col-cuenta,
+    tr.vienen-row td.col-cuenta { text-align: right; letter-spacing: 1px; }
+
+    /* Totales generales */
+    tr.totales-row td {
+        background: #1B2B4E;
         color: white;
         font-weight: bold;
-        border-top: 2px solid #000000;
+        border-top: 2px solid #000;
     }
-    
-    .libro-diario-table tr.totales-row td:nth-child(3) {
-        text-align: right;
+    tr.totales-row td.col-cuenta { text-align: right; }
+
+    /* Separador visual entre páginas en pantalla */
+    .page-separator {
+        border: none;
+        border-top: 3px dashed #C5A028;
+        margin: 30px 0 20px;
     }
-    
-    /* Salto de página */
-    .page-break {
-        page-break-before: always;
-        margin: 20px 0;
-        text-align: center;
-    }
-    
+
     /* Filtros */
     .filters-panel {
         background: white;
@@ -174,11 +133,7 @@
         margin-bottom: 25px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05);
     }
-    
-    .filter-group {
-        margin-bottom: 15px;
-    }
-    
+    .filter-group { margin-bottom: 15px; }
     .filter-group label {
         display: block;
         margin-bottom: 5px;
@@ -186,7 +141,6 @@
         color: #0A1628;
         font-size: 12px;
     }
-    
     .filter-control {
         width: 100%;
         padding: 8px 12px;
@@ -194,7 +148,6 @@
         border-radius: 10px;
         font-size: 14px;
     }
-    
     .btn-filter {
         background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
         color: #0A1628;
@@ -203,15 +156,8 @@
         border-radius: 10px;
         font-weight: 600;
         cursor: pointer;
-        transition: all 0.3s;
         width: 100%;
     }
-    
-    .btn-filter:hover {
-        transform: translateY(-2px);
-        box-shadow: 0 4px 12px rgba(197,160,40,0.3);
-    }
-    
     .btn-excel {
         background: #1e7e34;
         color: white;
@@ -219,71 +165,86 @@
         padding: 8px 20px;
         border-radius: 10px;
         font-weight: 600;
-        cursor: pointer;
-        transition: all 0.3s;
         text-decoration: none;
         display: inline-block;
         float: right;
     }
-    
-    .btn-excel:hover {
-        background: #166534;
-        transform: translateY(-2px);
+    .btn-excel:hover { background: #166534; color: white; }
+
+    /* Spinner overlay */
+    .spinner-overlay {
+        display: none;
+        position: fixed;
+        inset: 0;
+        background: rgba(10, 22, 40, 0.55);
+        z-index: 9999;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        gap: 16px;
+    }
+    .spinner-overlay.activo { display: flex; }
+    .spinner-circulo {
+        width: 56px;
+        height: 56px;
+        border: 5px solid rgba(244,180,26,0.3);
+        border-top-color: #F4B41A;
+        border-radius: 50%;
+        animation: girar 0.8s linear infinite;
+    }
+    .spinner-texto {
         color: white;
+        font-size: 14px;
+        font-weight: 600;
+        letter-spacing: 0.5px;
     }
-    
-    .clearfix::after {
-        content: "";
-        clear: both;
-        display: table;
-    }
-    
+    @keyframes girar { to { transform: rotate(360deg); } }
     .info-box {
         background: #f8fafc;
         border-left: 4px solid #C5A028;
         padding: 12px 15px;
         margin-bottom: 20px;
         border-radius: 8px;
+        font-size: 13px;
     }
-    
-    .text-center {
-        text-align: center;
+    .btn-ir-filtros {
+        position: fixed;
+        bottom: 30px;
+        right: 30px;
+        background: linear-gradient(135deg, var(--gold-primary) 0%, var(--gold-light) 100%);
+        color: var(--navy-dark);
+        border: none;
+        width: 46px;
+        height: 46px;
+        border-radius: 50%;
+        font-size: 18px;
+        cursor: pointer;
+        box-shadow: 0 4px 14px rgba(0,0,0,0.2);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        text-decoration: none;
+        transition: all 0.3s;
+        z-index: 100;
     }
-    
-    .text-right {
-        text-align: right;
+    .btn-ir-filtros:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(197,160,40,0.4);
+        color: var(--navy-dark);
     }
-    
-    .text-left {
-        text-align: left;
-    }
-    
-    .empty-state {
-        text-align: center;
-        padding: 60px 20px;
-    }
-    
+
     @media print {
-        .no-print {
-            display: none !important;
-        }
-        .page-break {
-            page-break-before: always;
-        }
-        .libro-diario-table th {
-            background: #1B2B4E;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        .libro-diario-table tr.separador-mes-row td {
-            background: #243B67;
-            -webkit-print-color-adjust: exact;
-            print-color-adjust: exact;
-        }
-        .libro-diario-table tr.van-row td,
-        .libro-diario-table tr.vienen-row td,
-        .libro-diario-table tr.totales-row td,
-        .libro-diario-table tr.comentario-total-row td {
+        .no-print { display: none !important; }
+        .page-separator { display: none; }
+        .libro-diario-wrapper { page-break-after: always; box-shadow: none; padding: 10px 0; }
+        .libro-diario-wrapper:last-child { page-break-after: avoid; }
+        .libro-diario-table th,
+        tr.separador-mes-row td,
+        tr.fecha-row td,
+        tr.van-row td, tr.vienen-row td,
+        tr.totales-row td,
+        tr.comentario-row td,
+        tr.detalle-row td.col-cuenta {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
@@ -291,9 +252,10 @@
 </style>
 
 <div class="form-container">
+
     <!-- Filtros -->
-    <div class="filters-panel no-print">
-        <form method="GET" id="filterForm">
+    <div class="filters-panel no-print" id="filtros">
+        <form method="GET">
             <div class="row">
                 <div class="col-md-3">
                     <div class="filter-group">
@@ -320,134 +282,186 @@
                     </div>
                 </div>
                 <div class="col-md-2">
-                    <div class="filter-group">
-                        <label><i class="fas fa-list-ol"></i> Líneas/Página</label>
-                        <select name="lineas_por_pagina" class="filter-control">
-                            <option value="15" {% if lineas_por_pagina == 15 %}selected{% endif %}>15 líneas</option>
-                            <option value="20" {% if lineas_por_pagina == 20 %}selected{% endif %}>20 líneas</option>
-                            <option value="25" {% if lineas_por_pagina == 25 %}selected{% endif %}>25 líneas</option>
-                            <option value="30" {% if lineas_por_pagina == 30 %}selected{% endif %}>30 líneas</option>
-                        </select>
+                    <div class="filter-group" style="padding-top:20px;">
+                        <button type="submit" class="btn-filter">
+                            <i class="fas fa-search"></i> Aplicar Filtros
+                        </button>
                     </div>
                 </div>
             </div>
-            <div class="row mt-3">
-                <div class="col-md-6">
-                    <button type="submit" class="btn-filter">
-                        <i class="fas fa-search"></i> Aplicar Filtros
-                    </button>
-                </div>
-                <div class="col-md-6 text-right">
-                    <a href="{% url 'libro_diario_excel' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}" class="btn-excel">
-                        <i class="fas fa-file-excel"></i> Exportar a Excel
+            <div class="row mt-2">
+                <div class="col-md-12 text-right">
+                    <a href="{% url 'libro_diario_excel' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}" class="btn-excel" style="margin-right:8px;" id="btn-excel" onclick="mostrarSpinner('Generando Excel...')">
+                        <i class="fas fa-file-excel"></i> Excel
+                    </a>
+                    <a href="{% url 'libro_diario_pdf' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}" class="btn-excel" style="background:#b91c1c;" id="btn-pdf" onclick="mostrarSpinner('Generando PDF...')">
+                        <i class="fas fa-print"></i> Imprimir
                     </a>
                 </div>
             </div>
         </form>
     </div>
-    
+
     {% if sin_datos %}
     <div class="empty-state">
-        <i class="fas fa-book"></i>
+        <i class="fas fa-book" style="font-size:48px;color:#C5A028;margin-bottom:16px;display:block;"></i>
         <h4>No hay datos para mostrar</h4>
         <p>No hay asientos finalizados en el período seleccionado.</p>
     </div>
     {% else %}
-    
+
     <div class="info-box no-print">
         <i class="fas fa-info-circle"></i>
-        <span>Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} | {{ paginas|length }} página(s) | Total Debe: Q {{ total_debe_general|floatformat:2 }} | Total Haber: Q {{ total_haber_general|floatformat:2 }}</span>
+        Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} &nbsp;|&nbsp;
+        {{ paginas|length }} página(s) &nbsp;|&nbsp;
+        Total Debe: <strong>Q {{ total_debe_general|floatformat:2 }}</strong> &nbsp;|&nbsp;
+        Total Haber: <strong>Q {{ total_haber_general|floatformat:2 }}</strong>
     </div>
-    
-    <!-- Páginas del reporte -->
+
     {% for pagina in paginas %}
-    <div class="libro-diario-wrapper {% if not forloop.first %}page-break{% endif %}">
-        <div class="text-center" style="margin-bottom: 15px;">
-            <h4 style="color: #0A1628; margin: 0; font-family: monospace;">LIBRO DIARIO</h4>
-            <p style="margin: 5px 0; font-size: 11px; font-family: monospace;">
-                {{ empresa.nombre_comercial|default:empresa.razon_social }} | 
-                Período: {{ periodo.nombre }} | 
-                Página {{ pagina.numero }} de {{ paginas|length }}
-            </p>
-            <p style="margin: 0; font-size: 10px; color: #64748b; font-family: monospace;">
-                Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
-            </p>
-        </div>
-        
-        <table class="libro-diario-table">
-            <thead>
-                <tr>
-                    <th>FECHA</th>
-                    <th>ASIENTO</th>
-                    <th>CUENTA / DETALLE</th>
-                    <th>DEBE</th>
-                    <th>HABER</th>
-                </tr>
-            </thead>
-            <tbody>
-                <!-- Línea VIENEN (si no es primera página) -->
-                {% if not pagina.es_primera and pagina.vienen_debe > 0 %}
-                <tr class="vienen-row">
-                    <td colspan="3">VIENEN (Vienen de página anterior)</td>
-                    <td class="text-right">Q {{ pagina.vienen_debe|floatformat:2 }}</td>
-                    <td class="text-right">Q {{ pagina.vienen_haber|floatformat:2 }}</td>
-                </tr>
-                {% endif %}
-                
-                <!-- Registros -->
-                {% for registro in pagina.registros %}
-                    {% if registro.es_separador_mes %}
-                        <!-- Separador de mes -->
-                        <tr class="separador-mes-row">
-                            <td colspan="5" class="text-center">{{ registro.cuenta_nombre }}</td>
-                        </tr>
-                    {% elif registro.es_comentario %}
-                        <!-- Fila de comentario con totales (misma fila) -->
-                        <tr class="comentario-total-row">
-                            <td></td>
-                            <td></td>
-                            <td class="text-left">{{ registro.cuenta_nombre }}</td>
-                            <td class="text-right">Q {{ registro.debe|floatformat:2 }}</td>
-                            <td class="text-right">Q {{ registro.haber|floatformat:2 }}</td>
-                        </tr>
-                    {% else %}
-                        <!-- Registro normal de movimiento o detalle -->
-                        <tr {% if registro.es_detalle %}class="detalle-row"{% endif %}>
-                            <td>{% if registro.fecha %}{{ registro.fecha|date:"d/m/Y" }}{% endif %}</td>
-                            <td>{% if registro.correlativo %}{{ registro.correlativo }}{% endif %}</td>
-                            <td>{{ registro.cuenta_nombre }}</td>
-                            <td class="text-right">{% if registro.debe > 0 %}Q {{ registro.debe|floatformat:2 }}{% endif %}</td>
-                            <td class="text-right">{% if registro.haber > 0 %}Q {{ registro.haber|floatformat:2 }}{% endif %}</td>
-                        </tr>
+
+        {% if not forloop.first %}
+        <hr class="page-separator no-print">
+        {% endif %}
+
+        <div class="libro-diario-wrapper">
+
+            <!-- Encabezado de página -->
+            <div style="text-align:center;margin-bottom:14px;">
+                <strong style="font-family:monospace;font-size:14px;color:#0A1628;">LIBRO DIARIO</strong><br>
+                <span style="font-family:monospace;font-size:11px;">
+                    {{ empresa.nombre_comercial|default:empresa.razon_social }}
+                </span><br>
+                <span style="font-family:monospace;font-size:10px;color:#475569;">
+                    Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+                    &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
+                    &nbsp;&mdash;&nbsp; Página {{ pagina.numero }} de {{ paginas|length }}
+                </span>
+            </div>
+
+            <table class="libro-diario-table">
+                <thead>
+                    <tr>
+                        <th class="col-partida">PARTIDA</th>
+                        <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
+                        <th class="col-debe">DEBE</th>
+                        <th class="col-haber">HABER</th>
+                    </tr>
+                </thead>
+                <tbody>
+
+                    <!-- VIENEN -->
+                    {% if not pagina.es_primera %}
+                    <tr class="vienen-row">
+                        <td class="col-partida"></td>
+                        <td class="col-cuenta">VIENEN</td>
+                        <td class="col-debe">Q {{ pagina.vienen_debe|monto }}</td>
+                        <td class="col-haber">Q {{ pagina.vienen_haber|monto }}</td>
+                    </tr>
                     {% endif %}
-                {% endfor %}
-                
-                <!-- Línea VAN (si no es última página) -->
-                {% if not pagina.es_ultima %}
-                <tr class="van-row">
-                    <td colspan="3">VAN (Van a siguiente página)</td>
-                    <td class="text-right">Q {{ pagina.acumulado_debe|floatformat:2 }}</td>
-                    <td class="text-right">Q {{ pagina.acumulado_haber|floatformat:2 }}</td>
-                </tr>
-                {% endif %}
-            </tbody>
-        </table>
-    </div>
+
+                    <!-- Registros -->
+                    {% for reg in pagina.registros %}
+
+                        {% if reg.tipo == 'separador_mes' %}
+                        <tr class="separador-mes-row">
+                            <td colspan="4">{{ reg.texto }}</td>
+                        </tr>
+
+                        {% elif reg.tipo == 'fecha' %}
+                        <tr class="fecha-row">
+                            <td colspan="4">{{ reg.texto }}</td>
+                        </tr>
+
+                        {% elif reg.tipo == 'movimiento' %}
+                        <tr class="movimiento-row">
+                            <td class="col-partida">{% if reg.correlativo %}-----{{ reg.correlativo }}-----{% endif %}</td>
+                            <td class="col-cuenta">{{ reg.cuenta_nombre }}</td>
+                            <td class="col-debe">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% endif %}</td>
+                            <td class="col-haber">{% if reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>
+                        </tr>
+
+                        {% elif reg.tipo == 'detalle' %}
+                        <tr class="detalle-row">
+                            <td class="col-partida"></td>
+                            <td class="col-cuenta">{{ reg.cuenta_nombre }}</td>
+                            <td class="col-debe">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% endif %}</td>
+                            <td class="col-haber">{% if reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>
+                        </tr>
+
+                        {% elif reg.tipo == 'comentario' %}
+                        <tr class="comentario-row">
+                            <td class="col-partida"></td>
+                            <td class="col-cuenta">v/ {{ reg.cuenta_nombre }}</td>
+                            <td class="col-debe">{{ reg.debe|monto }}</td>
+                            <td class="col-haber">{{ reg.haber|monto }}</td>
+                        </tr>
+
+                        {% endif %}
+                    {% endfor %}
+
+                    <!-- VAN -->
+                    {% if not pagina.es_ultima %}
+                    <tr class="van-row">
+                        <td class="col-partida"></td>
+                        <td class="col-cuenta">VAN</td>
+                        <td class="col-debe">Q {{ pagina.acumulado_debe|monto }}</td>
+                        <td class="col-haber">Q {{ pagina.acumulado_haber|monto }}</td>
+                    </tr>
+                    {% endif %}
+
+                </tbody>
+            </table>
+        </div>
+
     {% endfor %}
-    
-    <!-- Totales Generales -->
+
+    <!-- Totales generales -->
     <div class="libro-diario-wrapper">
         <table class="libro-diario-table">
             <tbody>
                 <tr class="totales-row">
-                    <td colspan="3" style="text-align: right;">TOTALES GENERALES DEL PERÍODO</td>
-                    <td class="text-right">Q {{ total_debe_general|floatformat:2 }}</td>
-                    <td class="text-right">Q {{ total_haber_general|floatformat:2 }}</td>
+                    <td class="col-partida"></td>
+                    <td class="col-cuenta">TOTALES GENERALES DEL PERÍODO</td>
+                    <td class="col-debe">Q {{ total_debe_general|monto }}</td>
+                    <td class="col-haber">Q {{ total_haber_general|monto }}</td>
                 </tr>
             </tbody>
         </table>
     </div>
-    
+
     {% endif %}
 </div>
+
+<!-- Spinner overlay -->
+<div class="spinner-overlay no-print" id="spinnerOverlay">
+    <div class="spinner-circulo"></div>
+    <div class="spinner-texto" id="spinnerTexto">Generando archivo...</div>
+</div>
+
+<a href="#filtros" class="btn-ir-filtros no-print" title="Ir a filtros">
+    <i class="fas fa-sliders-h"></i>
+</a>
+
+<script>
+function mostrarSpinner(texto) {
+    document.getElementById('spinnerTexto').innerText = texto;
+    document.getElementById('spinnerOverlay').classList.add('activo');
+    setTimeout(function() {
+        document.getElementById('spinnerOverlay').classList.remove('activo');
+    }, 30000);
+}
+
+// Se oculta cuando el navegador recupera el foco (al aparecer el diálogo de descarga)
+window.addEventListener('focus', function() {
+    document.getElementById('spinnerOverlay').classList.remove('activo');
+});
+// También al volver a la pestaña
+document.addEventListener('visibilitychange', function() {
+    if (!document.hidden) {
+        document.getElementById('spinnerOverlay').classList.remove('activo');
+    }
+});
+</script>
+
 {% endblock %}
