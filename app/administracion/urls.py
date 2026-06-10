@@ -73,6 +73,7 @@ urlpatterns = [
     # URLs API para detalles (AJAX)
     path('api/detalle/listar/<int:movimiento_id>/', views.detalle_list, name='detalle_list'),
     path('api/detalle/crear/', views.detalle_create, name='detalle_create'),
+    path('api/detalle/editar/', views.detalle_edit, name='detalle_edit'),
     path('api/detalle/eliminar/', views.detalle_delete, name='detalle_delete'),
     
     # Agrega estas líneas dentro de urlpatterns
@@ -100,4 +101,9 @@ urlpatterns = [
 
     # Migración de catálogos (sin menú)
     path('sys/migrar-catalogos/', views.migrar_catalogos_view, name='migrar_catalogos'),
+
+    # API selector rápido empresa/periodo
+    path('api/empresas-lista/', views.api_empresas_lista, name='api_empresas_lista'),
+    path('api/empresa-periodos/<int:empresa_id>/', views.api_empresa_periodos, name='api_empresa_periodos'),
+    path('api/set-periodo/', views.set_periodo_context, name='api_set_periodo'),
 ]

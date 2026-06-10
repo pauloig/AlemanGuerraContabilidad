@@ -318,7 +318,8 @@ class AsientoForm(forms.ModelForm):
         widgets = {
             'fecha': forms.DateInput(attrs={
                 'class': 'form-control-custom',
-                'type': 'date'
+                'type': 'date',
+                'lang': 'es-GT',
             }),
             'comentario': forms.Textarea(attrs={
                 'class': 'form-control-custom',

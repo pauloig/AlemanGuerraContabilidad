@@ -306,9 +306,9 @@
         <div id="toastMessage" class="toast-message" style="display: none;"></div>
         
         {% if asiento and asiento.estatus == 1 %}
-        <div class="info-box">
-            <i class="fas fa-lock"></i>
-            <span>Este asiento está finalizado y no puede ser modificado.</span>
+        <div class="info-box" style="background:#fef9c3;border-left-color:#C5A028;">
+            <i class="fas fa-exclamation-triangle" style="color:#C5A028;"></i>
+            <span>Este asiento está finalizado. Los cambios que realice quedarán guardados.</span>
         </div>
         {% endif %}
         
@@ -336,13 +336,11 @@
                     </div>
                 </div>
                 <div class="col-md-2">
-                    {% if not asiento or asiento.estatus == 0 %}
                     <div class="form-actions" style="justify-content: flex-start;">
                         <button type="submit" class="btn-submit" id="btnGuardarEncabezado">
                             <i class="fas fa-save"></i> Guardar Cambios
                         </button>
                     </div>
-                    {% endif %}
                 </div>
             </div>
             
@@ -355,11 +353,9 @@
                 <h4 style="color: var(--navy-dark); margin: 0;">
                     <i class="fas fa-exchange-alt"></i> Movimientos
                 </h4>
-                {% if not asiento or asiento.estatus == 0 %}
                 <button type="button" class="btn-add-movimiento" onclick="abrirModalMovimiento()" style="margin-top: 0;">
                     <i class="fas fa-plus-circle"></i> Agregar Movimiento
                 </button>
-                {% endif %}
             </div>
             
             <table class="movimientos-table" id="movimientosTable">
@@ -404,11 +400,9 @@
                                 <button class="btn-icon-table btn-detail" onclick="abrirModalDetalle({{ movimiento.id }})" title="Detalles">
                                     <i class="fas fa-receipt"></i>
                                 </button>
-                                {% if not asiento or asiento.estatus == 0 %}
                                 <button class="btn-icon-table btn-delete-mov" onclick="eliminarMovimiento({{ movimiento.id }})" title="Eliminar">
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
-                                {% endif %}
                             </div>
                         </td>
                     </tr>
@@ -537,6 +531,38 @@
 </div>
 
 <!-- Modal para Detalles -->
+<div class="modal fade" id="editarDetalleModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header" style="background: linear-gradient(135deg, var(--navy-light), var(--navy-medium));">
+                <h5 class="modal-title" style="color: white;"><i class="fas fa-edit"></i> Editar Detalle</h5>
+                <button type="button" class="btn-close btn-close-white close" data-dismiss="modal" aria-label="Close">×</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="editDetalleId">
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:13px;">Nombre / Proveedor</label>
+                    <input type="text" id="editDetalleNombre" class="form-control-custom" placeholder="Nombre del proveedor o descripción">
+                </div>
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="font-weight:600;font-size:13px;">Descripción <span style="color:#94a3b8;font-weight:400;">(opcional)</span></label>
+                    <input type="text" id="editDetalleDescripcion" class="form-control-custom" placeholder="Descripción adicional">
+                </div>
+                <div class="form-group">
+                    <label style="font-weight:600;font-size:13px;">Monto</label>
+                    <input type="number" id="editDetalleMonto" class="form-control-custom" step="0.01" min="0.01" placeholder="0.00">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn-cancel" data-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn-submit" onclick="guardarEdicionDetalle()">
+                    <i class="fas fa-save"></i> Guardar
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="modal fade" id="detalleModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg">
         <div class="modal-content">
@@ -1162,10 +1188,15 @@
                         div.className = 'detail-item';
                         div.innerHTML = `
                             <span><strong>${detalle.nombre}</strong>${detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${detalle.descripcion}</span>` : ''}</span>
-                            <span>Q ${detalle.monto.toFixed(2)}</span>
-                            <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})">
-                                <i class="fas fa-trash-alt"></i>
-                            </button>
+                            <span>Q ${parseFloat(detalle.monto).toFixed(2)}</span>
+                            <div style="display:flex;gap:4px;">
+                                <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${detalle.id},'${detalle.nombre.replace(/'/g,"\\'")}','${(detalle.descripcion||'').replace(/'/g,"\\'")}',${detalle.monto})" title="Editar">
+                                    <i class="fas fa-edit"></i>
+                                </button>
+                                <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})" title="Eliminar">
+                                    <i class="fas fa-trash-alt"></i>
+                                </button>
+                            </div>
                         `;
                         detallesList.appendChild(div);
                     });
@@ -1223,9 +1254,14 @@
                 newDetail.innerHTML = `
                     <span><strong>${data.detalle.nombre}</strong>${data.detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${data.detalle.descripcion}</span>` : ''}</span>
                     <span>Q ${data.detalle.monto.toFixed(2)}</span>
-                    <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${data.detalle.id})">
-                        <i class="fas fa-trash-alt"></i>
-                    </button>
+                    <div style="display:flex;gap:4px;">
+                        <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${data.detalle.id},'${data.detalle.nombre.replace(/'/g,"\\'")}','${(data.detalle.descripcion||'').replace(/'/g,"\\'")}',${data.detalle.monto})" title="Editar">
+                            <i class="fas fa-edit"></i>
+                        </button>
+                        <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${data.detalle.id})" title="Eliminar">
+                            <i class="fas fa-trash-alt"></i>
+                        </button>
+                    </div>
                 `;
                 
                 if (detallesList.children[0] && detallesList.children[0].classList.contains('text-muted')) {
@@ -1326,21 +1362,6 @@
     });
     
     // Bloquear campos si el asiento está finalizado
-    {% if asiento and asiento.estatus == 1 %}
-    document.addEventListener('DOMContentLoaded', function() {
-        document.querySelectorAll('input, select, textarea, button').forEach(el => {
-            if (el.type !== 'button' && el.id !== 'logoutForm' && !el.classList.contains('btn-cancel')) {
-                if (el.tagName !== 'A') {
-                    el.disabled = true;
-                }
-            }
-        });
-        document.querySelectorAll('.btn-detail, .btn-delete-mov, .btn-add-movimiento').forEach(btn => {
-            if (btn.disabled !== undefined) btn.disabled = true;
-        });
-    });
-    {% endif %}
-
     // Agregar event listener manual para el botón cancelar
     document.addEventListener('DOMContentLoaded', function() {
         const cancelBtn = document.querySelector('#movimientoModal .btn-cancel');
@@ -1359,6 +1380,47 @@
             });
         }
     });
+
+    function abrirEditarDetalle(id, nombre, descripcion, monto) {
+        document.getElementById('editDetalleId').value       = id;
+        document.getElementById('editDetalleNombre').value   = nombre;
+        document.getElementById('editDetalleDescripcion').value = descripcion;
+        document.getElementById('editDetalleMonto').value    = monto;
+        $('#detalleModal').modal('hide');
+        $('#editarDetalleModal').modal('show');
+    }
+
+    function guardarEdicionDetalle() {
+        const id          = document.getElementById('editDetalleId').value;
+        const nombre      = document.getElementById('editDetalleNombre').value.trim();
+        const descripcion = document.getElementById('editDetalleDescripcion').value.trim();
+        const monto       = document.getElementById('editDetalleMonto').value;
+
+        if (!nombre || !monto) {
+            mostrarMensaje('El nombre y el monto son requeridos', 'danger');
+            return;
+        }
+
+        fetch('/administracion/api/detalle/editar/', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'X-CSRFToken': getCookie('csrftoken')
+            },
+            body: `detalle_id=${id}&nombre=${encodeURIComponent(nombre)}&descripcion=${encodeURIComponent(descripcion)}&monto=${monto}`
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                $('#editarDetalleModal').modal('hide');
+                // Reabrir modal de detalles con datos actualizados
+                abrirModalDetalle(movimientoIdActual);
+                mostrarMensaje('Detalle actualizado correctamente', 'success');
+            } else {
+                mostrarMensaje(data.error || 'Error al actualizar', 'danger');
+            }
+        });
+    }
 
 </script>
 {% endblock %}

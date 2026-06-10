@@ -1,6 +1,6 @@
 {% load static%}
 <!DOCTYPE html>
-<html lang="es">
+<html lang="es-419">
 <head>
 
   <!-- SITE TITTLE -->
@@ -257,6 +257,90 @@
       }
 
       /* User Dropdown */
+      /* ── Selector rápido empresa/periodo ── */
+      .selector-empresa-wrap {
+          position: relative;
+      }
+      .selector-empresa-btn {
+          background: rgba(255,255,255,0.12);
+          border: 1px solid rgba(255,255,255,0.2);
+          color: white;
+          width: 32px; height: 32px;
+          border-radius: 8px;
+          cursor: pointer;
+          display: flex; align-items: center; justify-content: center;
+          font-size: 13px;
+          transition: background 0.2s;
+      }
+      .selector-empresa-btn:hover { background: rgba(255,255,255,0.22); }
+      .selector-empresa-panel {
+          display: none;
+          position: absolute;
+          top: calc(100% + 10px);
+          right: 0;
+          width: 300px;
+          background: white;
+          border-radius: 14px;
+          box-shadow: 0 8px 30px rgba(0,0,0,0.18);
+          padding: 16px;
+          z-index: 9999;
+          border: 1px solid #e2e8f0;
+      }
+      .selector-empresa-panel.open { display: block; }
+      .sep-header {
+          font-weight: 700; font-size: 12px;
+          color: #0A1628; margin-bottom: 12px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid #e2e8f0;
+          letter-spacing: 0.3px;
+      }
+      .sep-field { margin-bottom: 10px; }
+      .sep-field label {
+          display: block; font-size: 11px;
+          font-weight: 600; color: #475569;
+          margin-bottom: 4px;
+      }
+      .sep-field input[type="text"] {
+          width: 100% !important; padding: 7px 10px !important;
+          border: 1px solid #e2e8f0 !important; border-radius: 8px !important;
+          font-size: 12px !important; outline: none !important;
+          box-sizing: border-box !important;
+      }
+      .sep-field input[type="text"]:focus { border-color: #C5A028 !important; }
+      .sep-lista {
+          max-height: 160px !important; overflow-y: auto !important;
+          border: 1px solid #e2e8f0 !important; border-radius: 8px !important;
+          margin-top: 4px !important;
+          background: white !important;
+      }
+      .sep-lista-item {
+          padding: 7px 10px !important; font-size: 12px !important;
+          cursor: pointer !important; border-bottom: 1px solid #f1f5f9 !important;
+          color: #1e293b !important;
+      }
+      .sep-lista-item:last-child { border-bottom: none !important; }
+      .sep-lista-item:hover { background: #f8fafc !important; }
+      .sep-lista-item.seleccionado { background: #fffbeb !important; font-weight: 600 !important; }
+      .sep-select {
+          width: 100% !important; padding: 7px 10px !important;
+          border: 1px solid #e2e8f0 !important; border-radius: 8px !important;
+          font-size: 12px !important; outline: none !important;
+          box-sizing: border-box !important; background: white !important;
+          display: block !important;
+      }
+      .sep-select:focus { border-color: #C5A028 !important; }
+      .sep-oculto { display: none !important; }
+      .sep-visible { display: block !important; }
+
+      .sep-btn-confirmar {
+          width: 100%; padding: 8px;
+          background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
+          color: #0A1628; border: none; border-radius: 8px;
+          font-weight: 700; font-size: 12px; cursor: pointer;
+          margin-top: 4px; transition: opacity 0.2s;
+      }
+      .sep-btn-confirmar:hover { opacity: 0.9; }
+
       .user-dropdown {
           position: relative;
       }
@@ -718,6 +802,39 @@
                         </span>
                     {% endif %}
                 </div>
+
+                <!-- Selector rápido empresa/periodo -->
+                <div class="selector-empresa-wrap" id="selectorEmpresaWrap">
+                    <button class="selector-empresa-btn" onclick="toggleSelectorEmpresa()" title="Cambiar empresa y período">
+                        <i class="fas fa-exchange-alt"></i>
+                    </button>
+                    <div class="selector-empresa-panel" id="selectorEmpresaPanel">
+                        <div class="sep-header">Cambiar Empresa / Período</div>
+
+                        <!-- Búsqueda de empresa -->
+                        <div class="sep-field">
+                            <label>Empresa</label>
+                            <input type="text" id="sepBusqueda" placeholder="Buscar empresa..."
+                                   oninput="filtrarEmpresas(this.value)" autocomplete="off">
+                            <div class="sep-lista" id="sepLista"></div>
+                        </div>
+
+                        <!-- Selección de período (aparece tras elegir empresa) -->
+                        <div class="sep-field sep-oculto" id="sepPeriodoWrap">
+                            <label>Período</label>
+                            <select id="sepPeriodo" class="sep-select ignore">
+                                <option value="">Seleccione un período</option>
+                            </select>
+                        </div>
+
+                        <button class="sep-btn-confirmar sep-oculto" id="sepBtnConfirmar"
+                                onclick="confirmarSeleccion()">
+                            <i class="fas fa-check"></i> Confirmar
+                        </button>
+
+                        <div id="sepMensaje" style="font-size:11px;color:#f87171;margin-top:6px;display:none;"></div>
+                    </div>
+                </div>
                 
                 <!-- User Dropdown -->
                 <div class="user-dropdown">
@@ -779,11 +896,163 @@
         const dropdown = document.querySelector('.user-dropdown');
         if (dropdown && !dropdown.contains(event.target)) {
             const menu = document.getElementById('userDropdownMenu');
-            if (menu) {
-                menu.classList.remove('show');
+            if (menu) menu.classList.remove('show');
+        }
+        // Cerrar selector empresa si clic fuera
+        const wrap = document.getElementById('selectorEmpresaWrap');
+        const panel = document.getElementById('selectorEmpresaPanel');
+        if (wrap && panel && panel.classList.contains('open')) {
+            // Solo cerrar si el clic no fue dentro del wrap ni en un item de lista
+            if (!wrap.contains(event.target)) {
+                panel.classList.remove('open');
             }
         }
     });
+
+    // ── Selector rápido empresa/periodo ──────────────────────────────
+    let todasEmpresas = [];
+    let empresaSeleccionadaId = null;
+
+    function toggleSelectorEmpresa() {
+        const panel = document.getElementById('selectorEmpresaPanel');
+        panel.classList.toggle('open');
+        if (panel.classList.contains('open') && todasEmpresas.length === 0) {
+            cargarEmpresas();
+        }
+    }
+
+    function cargarEmpresas() {
+        fetch('/administracion/api/empresas-lista/')
+            .then(r => r.json())
+            .then(data => {
+                todasEmpresas = data.empresas || [];
+                mostrarLista(todasEmpresas);
+            })
+            .catch(() => {
+                document.getElementById('sepMensaje').textContent = 'Error al cargar empresas.';
+                document.getElementById('sepMensaje').style.display = 'block';
+            });
+    }
+
+    function mostrarLista(empresas) {
+        const lista = document.getElementById('sepLista');
+        lista.innerHTML = '';
+        if (empresas.length === 0) {
+            lista.innerHTML = '<div class="sep-lista-item" style="color:#94a3b8;">Sin resultados</div>';
+        } else {
+            empresas.forEach(empresa => {
+                const div = document.createElement('div');
+                div.className = 'sep-lista-item' + (empresa.id == empresaSeleccionadaId ? ' seleccionado' : '');
+                div.textContent = empresa.nombre;
+                div.dataset.id = empresa.id;
+                div.onclick = (evt) => { evt.stopPropagation(); seleccionarEmpresa(empresa.id, empresa.nombre); };
+                lista.appendChild(div);
+            });
+        }
+        lista.style.display = 'block';
+    }
+
+    function filtrarEmpresas(texto) {
+        const lista = document.getElementById('sepLista');
+        if (!texto) {
+            lista.style.display = 'none';
+            return;
+        }
+        const filtradas = todasEmpresas.filter(e =>
+            e.nombre.toLowerCase().includes(texto.toLowerCase()) ||
+            e.nit.toLowerCase().includes(texto.toLowerCase())
+        );
+        mostrarLista(filtradas);
+    }
+
+    function seleccionarEmpresa(id, nombre) {
+        empresaSeleccionadaId = id;
+        document.getElementById('sepBusqueda').value = nombre;
+        document.getElementById('sepLista').style.display = 'none';
+
+        const wrap   = document.getElementById('sepPeriodoWrap');
+        const btn    = document.getElementById('sepBtnConfirmar');
+        const select = document.getElementById('sepPeriodo');
+
+        wrap.classList.add('sep-oculto');
+        wrap.classList.remove('sep-visible');
+        btn.classList.add('sep-oculto');
+        btn.classList.remove('sep-visible');
+        select.innerHTML   = '<option value="">Cargando...</option>';
+
+        const url = '/administracion/api/empresa-periodos/' + id + '/';
+        console.log('[Selector] Fetching:', url);
+
+        fetch(url)
+            .then(r => {
+                console.log('[Selector] Status:', r.status);
+                return r.json();
+            })
+            .then(data => {
+                console.log('[Selector] Data:', JSON.stringify(data));
+                console.log('[Selector] periodos type:', typeof data.periodos, 'length:', data.periodos ? data.periodos.length : 'null');
+                select.innerHTML = '<option value="">Seleccione un período</option>';
+                const periodos = data.periodos || [];
+                console.log('[Selector] periodos array:', periodos);
+                periodos.forEach(function(p) {
+                    console.log('[Selector] Periodo:', p);
+                    const opt = document.createElement('option');
+                    opt.value = p.id;
+                    opt.textContent = p.nombre + (p.activo ? ' ★' : '');
+                    if (p.activo) opt.selected = true;
+                    select.appendChild(opt);
+                });
+                console.log('[Selector] Options added:', select.options.length);
+                wrap.classList.remove('sep-oculto');
+                wrap.classList.add('sep-visible');
+                btn.classList.remove('sep-oculto');
+                btn.classList.add('sep-visible');
+            })
+            .catch(err => {
+                console.error('[Selector] Error:', err);
+                select.innerHTML = '<option value="">Error al cargar</option>';
+                wrap.style.display = 'block';
+            });
+    }
+
+    function confirmarSeleccion() {
+        const periodoId = document.getElementById('sepPeriodo').value;
+        const msg = document.getElementById('sepMensaje');
+        msg.style.display = 'none';
+
+        if (!empresaSeleccionadaId) {
+            msg.textContent = 'Seleccione una empresa.';
+            msg.style.display = 'block'; return;
+        }
+        if (!periodoId) {
+            msg.textContent = 'Seleccione un período.';
+            msg.style.display = 'block'; return;
+        }
+
+        const btn = document.getElementById('sepBtnConfirmar');
+        btn.disabled = true;
+        btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Aplicando...';
+
+        const csrf = document.querySelector('[name=csrfmiddlewaretoken]');
+        const token = csrf ? csrf.value : '';
+
+        fetch('/administracion/api/set-periodo-context/', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: 'periodo_id=' + periodoId + '&csrfmiddlewaretoken=' + token
+        })
+        .then(r => r.json())
+        .then(data => {
+            if (data.success) {
+                window.location.reload();
+            } else {
+                msg.textContent = data.error || 'Error al aplicar.';
+                msg.style.display = 'block';
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check"></i> Confirmar';
+            }
+        });
+    }
 </script>
 
 </body>

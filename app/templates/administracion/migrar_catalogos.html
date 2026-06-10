@@ -135,17 +135,36 @@
 
         <div class="mig-section">
             <h5><i class="fas fa-sitemap" style="color:var(--gold-primary);margin-right:8px;"></i>Catálogos</h5>
-            <p>Elimina y recarga áreas contables, grupos, subgrupos, cuentas, períodos, empresas, sucursales y proveedores. También borra todos los asientos asociados.</p>
+            <p>Sube los 9 archivos CSV de catálogos. Elimina y recarga áreas, grupos, subgrupos, cuentas, períodos, empresas, sucursales y proveedores. También borra todos los asientos.</p>
             <div class="mig-warning">
                 <i class="fas fa-exclamation-triangle"></i>
                 Elimina <strong>todos los asientos, movimientos y catálogos</strong> antes de recargar. No se puede deshacer.
             </div>
-            <form method="POST" onsubmit="this.querySelector('button').disabled=true; this.querySelector('button').innerHTML='<i class=\'fas fa-spinner fa-spin\'></i> Ejecutando...';">
+            <form method="POST" enctype="multipart/form-data" onsubmit="return validarCatalogos(this);">
                 {% csrf_token %}
                 <input type="hidden" name="accion" value="catalogos">
-                <button type="submit" class="btn-ejecutar">
-                    <i class="fas fa-play-circle"></i> Ejecutar Catálogos
-                </button>
+                <div class="row">
+                    <div class="col-md-4">
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> AreaContable.csv</label><input type="file" name="csv_areacontable" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Grupo.csv</label><input type="file" name="csv_grupo" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> SubGrupo.csv</label><input type="file" name="csv_subgrupo" accept=".csv"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Cuenta.csv</label><input type="file" name="csv_cuenta" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Periodo.csv</label><input type="file" name="csv_periodo" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Empresa.csv</label><input type="file" name="csv_empresa" accept=".csv"></div>
+                    </div>
+                    <div class="col-md-4">
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> EmpresaPeriodo.csv</label><input type="file" name="csv_empresaperiodo" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Sucursal.csv</label><input type="file" name="csv_sucursal" accept=".csv"></div>
+                        <div class="file-group"><label><i class="fas fa-file-csv"></i> Proveedor.csv</label><input type="file" name="csv_proveedor" accept=".csv"></div>
+                    </div>
+                </div>
+                <div style="margin-top:14px;">
+                    <button type="submit" class="btn-ejecutar">
+                        <i class="fas fa-play-circle"></i> Ejecutar Catálogos
+                    </button>
+                </div>
             </form>
         </div>
 
@@ -213,6 +232,23 @@ function validarArchivos(form) {
     for (const campo of campos) {
         if (!form[campo].files.length) {
             alert('Debe seleccionar los tres archivos CSV.');
+            return false;
+        }
+    }
+    form.querySelector('button[type="submit"]').disabled = true;
+    form.querySelector('button[type="submit"]').innerHTML = '<i class="fas fa-spinner fa-spin"></i> Ejecutando...';
+    return true;
+}
+
+function validarCatalogos(form) {
+    const campos = [
+        'csv_areacontable','csv_grupo','csv_subgrupo','csv_cuenta',
+        'csv_periodo','csv_empresa','csv_empresaperiodo',
+        'csv_sucursal','csv_proveedor'
+    ];
+    for (const campo of campos) {
+        if (!form[campo] || !form[campo].files.length) {
+            alert('Debe seleccionar los 9 archivos CSV de catálogos.');
             return false;
         }
     }

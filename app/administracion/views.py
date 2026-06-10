@@ -1298,10 +1298,6 @@ def asiento_edit(request, pk):
         messages.warning(request, 'Este asiento no pertenece al período activo actual.')
         return redirect('asiento_list')
     
-    if asiento.estatus == 1:
-        messages.error(request, 'No se puede editar un asiento finalizado')
-        return redirect('asiento_list')
-    
     # Manejar solicitud AJAX
     if request.method == 'POST' and request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         action = request.POST.get('action')
@@ -1495,9 +1491,6 @@ def detalle_create(request):
     movimiento_id = request.POST.get('movimiento_id')
     movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
     
-    if movimiento.id_asiento.estatus == 1:
-        return JsonResponse({'success': False, 'error': 'No se pueden agregar detalles a un asiento finalizado'})
-    
     form = DetalleMovimientoForm(request.POST)
     if form.is_valid():
         detalle = form.save(commit=False)
@@ -1538,9 +1531,6 @@ def detalle_delete(request):
     detalle = get_object_or_404(DetalleMovimiento, pk=detalle_id)
     movimiento = detalle.id_movimiento
     
-    if movimiento.id_asiento.estatus == 1:
-        return JsonResponse({'success': False, 'error': 'No se pueden eliminar detalles de un asiento finalizado'})
-    
     detalle.delete()
     
     total_detalles = movimiento.get_total_detalles()
@@ -1552,9 +1542,53 @@ def detalle_delete(request):
         'monto_movimiento': float(movimiento.monto),
         'detalles_completos': detalles_completos
     })
-    
-    
-# Agrega estas funciones al final de tu views.py
+
+
+@login_required
+@require_http_methods(["POST"])
+def detalle_edit(request):
+    """
+    Editar detalle de movimiento vía AJAX
+    """
+    detalle_id  = request.POST.get('detalle_id')
+    nombre      = request.POST.get('nombre', '').strip()
+    descripcion = request.POST.get('descripcion', '').strip()
+    monto       = request.POST.get('monto')
+
+    if not detalle_id or not nombre or not monto:
+        return JsonResponse({'success': False, 'error': 'Faltan datos requeridos'})
+
+    detalle   = get_object_or_404(DetalleMovimiento, pk=detalle_id)
+    movimiento = detalle.id_movimiento
+
+    try:
+        monto = float(monto)
+        if monto <= 0:
+            return JsonResponse({'success': False, 'error': 'El monto debe ser mayor a 0'})
+    except (ValueError, TypeError):
+        return JsonResponse({'success': False, 'error': 'Monto inválido'})
+
+    detalle.nombre      = nombre
+    detalle.descripcion = descripcion or None
+    detalle.monto       = monto
+    detalle.modificado_por = request.user
+    detalle.save()
+
+    total_detalles   = movimiento.get_total_detalles()
+    detalles_completos = total_detalles == movimiento.monto
+
+    return JsonResponse({
+        'success': True,
+        'detalle': {
+            'id':          detalle.id,
+            'nombre':      detalle.nombre,
+            'descripcion': detalle.descripcion or '',
+            'monto':       float(detalle.monto),
+        },
+        'total_detalles':    float(total_detalles),
+        'monto_movimiento':  float(movimiento.monto),
+        'detalles_completos': detalles_completos,
+    })
 
 @login_required
 def api_subgrupos_por_grupo(request, grupo_id):
@@ -3404,7 +3438,29 @@ def migrar_catalogos_view(request):
                         detalle_file=f_detalle,
                     )
             else:
-                call_command('migrar_catalogos', stdout=output, stderr=output)
+                archivos_requeridos = [
+                    'AreaContable.csv', 'Grupo.csv', 'SubGrupo.csv', 'Cuenta.csv',
+                    'Periodo.csv', 'Empresa.csv', 'EmpresaPeriodo.csv',
+                    'Sucursal.csv', 'Proveedor.csv',
+                ]
+                archivos = {}
+                faltantes = []
+                for nombre in archivos_requeridos:
+                    clave = 'csv_' + nombre.replace('.csv', '').lower()
+                    f = request.FILES.get(clave)
+                    if f:
+                        archivos[nombre] = f
+                    else:
+                        faltantes.append(nombre)
+
+                if faltantes:
+                    error = f'Archivos faltantes: {", ".join(faltantes)}'
+                else:
+                    call_command(
+                        'migrar_catalogos',
+                        stdout=output, stderr=output,
+                        files=archivos,
+                    )
         except Exception as e:
             error = str(e)
 
@@ -3417,3 +3473,49 @@ def migrar_catalogos_view(request):
         })
 
     return render(request, 'administracion/migrar_catalogos.html', {'ejecutado': False})
+
+
+
+# ==================== API SELECTOR RÁPIDO ====================
+
+@login_required
+def api_empresas_lista(request):
+    """Retorna todas las empresas para el selector rápido."""
+    empresas = Empresa.objects.order_by('nombre_comercial', 'razon_social').values(
+        'id', 'nombre_comercial', 'razon_social', 'nit'
+    )
+    data = [
+        {
+            'id': e['id'],
+            'nombre': e['nombre_comercial'] or e['razon_social'],
+            'nit': e['nit'],
+        }
+        for e in empresas
+    ]
+    return JsonResponse({'empresas': data})
+
+
+@login_required
+def api_empresa_periodos(request, empresa_id):
+    """Retorna los períodos asignados a una empresa para el selector rápido."""
+    try:
+        empresa = Empresa.objects.get(id=empresa_id)
+    except Empresa.DoesNotExist:
+        return JsonResponse({'periodos': []})
+
+    eps = (
+        EmpresaPeriodo.objects
+        .filter(id_empresa=empresa)
+        .select_related('id_periodo')
+        .order_by('-id_periodo__fecha_inicial')
+    )
+
+    periodos = [
+        {
+            'id':     ep.id,
+            'nombre': ep.id_periodo.nombre,
+            'activo': bool(ep.estatus),
+        }
+        for ep in eps
+    ]
+    return JsonResponse({'periodos': periodos})
