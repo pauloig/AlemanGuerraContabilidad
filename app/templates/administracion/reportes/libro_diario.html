@@ -19,79 +19,97 @@
     .libro-diario-table {
         width: 100%;
         border-collapse: collapse;
-        font-family: 'Courier New', monospace;
-        font-size: 11px;
+        font-family: Arial, Helvetica, sans-serif;
+        font-size: 12px;
         background: white;
         table-layout: fixed;
     }
 
-    .libro-diario-table th,
+    /* Solo bordes verticales en celdas normales */
     .libro-diario-table td {
-        border: 1px solid #000;
-        padding: 4px 7px;
+        border-left:  1px solid #94a3b8;
+        border-right: 1px solid #94a3b8;
+        border-top:   none;
+        border-bottom: none;
+        padding: 3px 7px;
         vertical-align: middle;
     }
 
+    /* Encabezados de columna */
     .libro-diario-table th {
-        background: #1B2B4E;
-        color: white;
+        background: #EEF2F7;
+        color: #0A1628;
         font-weight: bold;
         text-align: center;
-        border-color: #334155;
+        border: 0.5px solid #94a3b8;
+        border-bottom: 1.5px solid #94a3b8;
+        padding: 4px 7px;
     }
 
+    /* Anchos de columna */
     .col-partida  { width: 75px;  text-align: center; }
-    .col-cuenta   { width: auto; }
+    .col-cuenta   { width: auto;  text-align: left; }
+    .col-auxiliar { width: 115px; text-align: right; font-family: monospace; }
     .col-debe     { width: 115px; text-align: right; font-family: monospace; }
     .col-haber    { width: 115px; text-align: right; font-family: monospace; }
 
     /* Separador de mes */
     tr.separador-mes-row td {
-        background: #243B67;
-        color: white;
+        background: #d1d5db;
+        color: #0A1628;
         font-weight: bold;
         text-align: center;
         letter-spacing: 2px;
-        border-top: 2px solid #C5A028;
-        border-bottom: 2px solid #C5A028;
+        border-top: 1.5px solid #94a3b8;
+        border-bottom: 1px solid #94a3b8;
+        padding: 3px 7px;
     }
 
     /* Fila de fecha */
     tr.fecha-row td {
-        background: #f1f5f9;
+        background: #d1d5db;
         font-weight: 700;
         color: #1B2B4E;
         border-top: 1px solid #94a3b8;
         border-bottom: 1px solid #94a3b8;
         text-align: center;
+        padding: 3px 7px;
+        line-height: 1.2;
     }
 
-    /* Movimiento normal */
+    /* Movimiento — sin borde horizontal */
     tr.movimiento-row td.col-partida {
         color: #1B2B4E;
         font-weight: 700;
         font-size: 10px;
     }
 
-    /* Detalle (indentado) */
+    /* Detalle — sin borde horizontal, columna auxiliar recibe el monto */
     tr.detalle-row td.col-cuenta {
         padding-left: 28px;
         color: #4b5563;
-        background: #f9fafb;
         font-style: italic;
+    }
+
+    /* Fila espacio */
+    tr.espacio-row td {
+        border: none;
+        height: 5px;
     }
 
     /* Comentario / totales del asiento */
     tr.comentario-row td {
-        background: #e5e7eb;
-        border-top: 1px solid #000;
-        border-bottom: 2px solid #000;
+        background: #EEF2F7;
+        border-top: 1px solid #94a3b8;
+        border-bottom: 1.5px solid #000;
         font-style: italic;
+        padding: 3px 7px;
     }
     tr.comentario-row td.col-cuenta {
         color: #1B2B4E;
         padding-left: 12px;
     }
+    tr.comentario-row td.col-auxiliar,
     tr.comentario-row td.col-debe,
     tr.comentario-row td.col-haber {
         font-weight: bold;
@@ -101,10 +119,11 @@
 
     /* VAN / VIENEN */
     tr.van-row td, tr.vienen-row td {
-        background: #d1d5db;
+        background: #EEF2F7;
         font-weight: bold;
-        border-top: 2px solid #000;
-        border-bottom: 2px solid #000;
+        border-top: 1.5px solid #000;
+        border-bottom: 1.5px solid #000;
+        padding: 3px 7px;
     }
     tr.van-row td.col-cuenta,
     tr.vienen-row td.col-cuenta { text-align: right; letter-spacing: 1px; }
@@ -115,10 +134,12 @@
         color: white;
         font-weight: bold;
         border-top: 2px solid #000;
+        border-bottom: 2px solid #000;
+        padding: 4px 7px;
     }
     tr.totales-row td.col-cuenta { text-align: right; }
 
-    /* Separador visual entre páginas en pantalla */
+    /* Separador visual entre páginas */
     .page-separator {
         border: none;
         border-top: 3px dashed #C5A028;
@@ -327,16 +348,23 @@
         <div class="libro-diario-wrapper">
 
             <!-- Encabezado de página -->
-            <div style="text-align:center;margin-bottom:14px;">
-                <strong style="font-family:monospace;font-size:14px;color:#0A1628;">LIBRO DIARIO</strong><br>
-                <span style="font-family:monospace;font-size:11px;">
-                    {{ empresa.nombre_comercial|default:empresa.razon_social }}
-                </span><br>
-                <span style="font-family:monospace;font-size:10px;color:#475569;">
-                    Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
-                    &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
-                    &nbsp;&mdash;&nbsp; Página {{ pagina.numero }} de {{ paginas|length }}
-                </span>
+            <div style="position:relative;margin-bottom:14px;">
+                <div style="position:absolute;top:0;right:0;font-family:monospace;font-size:10px;color:#475569;">
+                    Página {{ pagina.numero }} de {{ paginas|length }}
+                </div>
+                <div style="text-align:center;">
+                    <strong style="font-family:Arial,sans-serif;font-size:15px;color:#0A1628;display:block;margin-bottom:2px;">LIBRO DE DIARIO</strong>
+                    <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;display:block;margin-bottom:2px;">
+                        {{ empresa.nombre_comercial|default:empresa.razon_social }}
+                    </span>
+                    <span style="font-family:Arial,sans-serif;font-size:10px;color:#333;display:block;margin-bottom:1px;">
+                        Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+                        &nbsp;&mdash;&nbsp; Período: {{ periodo.nombre }}
+                    </span>
+                    <span style="font-family:Arial,sans-serif;font-size:9px;color:#555;display:block;">
+                        (Expresado en Quetzales)
+                    </span>
+                </div>
             </div>
 
             <table class="libro-diario-table">
@@ -344,6 +372,7 @@
                     <tr>
                         <th class="col-partida">PARTIDA</th>
                         <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
+                        <th class="col-auxiliar"></th>
                         <th class="col-debe">DEBE</th>
                         <th class="col-haber">HABER</th>
                     </tr>
@@ -355,6 +384,7 @@
                     <tr class="vienen-row">
                         <td class="col-partida"></td>
                         <td class="col-cuenta">VIENEN</td>
+                        <td class="col-auxiliar"></td>
                         <td class="col-debe">Q {{ pagina.vienen_debe|monto }}</td>
                         <td class="col-haber">Q {{ pagina.vienen_haber|monto }}</td>
                     </tr>
@@ -365,18 +395,24 @@
 
                         {% if reg.tipo == 'separador_mes' %}
                         <tr class="separador-mes-row">
-                            <td colspan="4">{{ reg.texto }}</td>
+                            <td colspan="5">{{ reg.texto }}</td>
                         </tr>
 
                         {% elif reg.tipo == 'fecha' %}
                         <tr class="fecha-row">
-                            <td colspan="4">{{ reg.texto }}</td>
+                            <td colspan="5">{{ reg.texto }}</td>
+                        </tr>
+
+                        {% elif reg.tipo == 'espacio' %}
+                        <tr class="espacio-row">
+                            <td colspan="5"></td>
                         </tr>
 
                         {% elif reg.tipo == 'movimiento' %}
                         <tr class="movimiento-row">
-                            <td class="col-partida">{% if reg.correlativo %}-----{{ reg.correlativo }}-----{% endif %}</td>
+                            <td class="col-partida">{% if reg.correlativo %}{{ reg.correlativo }}{% endif %}</td>
                             <td class="col-cuenta">{{ reg.cuenta_nombre }}</td>
+                            <td class="col-auxiliar"></td>
                             <td class="col-debe">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% endif %}</td>
                             <td class="col-haber">{% if reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>
                         </tr>
@@ -385,14 +421,16 @@
                         <tr class="detalle-row">
                             <td class="col-partida"></td>
                             <td class="col-cuenta">{{ reg.cuenta_nombre }}</td>
-                            <td class="col-debe">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% endif %}</td>
-                            <td class="col-haber">{% if reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>
+                            <td class="col-auxiliar">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% elif reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>
+                            <td class="col-debe"></td>
+                            <td class="col-haber"></td>
                         </tr>
 
                         {% elif reg.tipo == 'comentario' %}
                         <tr class="comentario-row">
                             <td class="col-partida"></td>
                             <td class="col-cuenta">v/ {{ reg.cuenta_nombre }}</td>
+                            <td class="col-auxiliar"></td>
                             <td class="col-debe">{{ reg.debe|monto }}</td>
                             <td class="col-haber">{{ reg.haber|monto }}</td>
                         </tr>
@@ -405,6 +443,7 @@
                     <tr class="van-row">
                         <td class="col-partida"></td>
                         <td class="col-cuenta">VAN</td>
+                        <td class="col-auxiliar"></td>
                         <td class="col-debe">Q {{ pagina.acumulado_debe|monto }}</td>
                         <td class="col-haber">Q {{ pagina.acumulado_haber|monto }}</td>
                     </tr>
@@ -423,6 +462,7 @@
                 <tr class="totales-row">
                     <td class="col-partida"></td>
                     <td class="col-cuenta">TOTALES GENERALES DEL PERÍODO</td>
+                    <td class="col-auxiliar"></td>
                     <td class="col-debe">Q {{ total_debe_general|monto }}</td>
                     <td class="col-haber">Q {{ total_haber_general|monto }}</td>
                 </tr>

@@ -1996,32 +1996,43 @@ def libro_diario_pdf(request):
     size: letter portrait;
     margin: 1.5cm 1.8cm;
   }}
-  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 9pt; color: #000; }}
   .page-break {{ page-break-before: always; }}
-  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
-  h2 {{ font-size: 9pt;  text-align: center; margin: 0 0 2px; font-weight: normal; }}
-  h3 {{ font-size: 8pt;  text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
-  table {{ border-collapse: collapse; margin-top: 4px; width: 97%; margin-left: 1.5%; margin-right: 1.5%; }}
-  th {{ background-color: #EEF2F7; color: #0A1628; font-size: 8pt; padding: 3px 5px;
-        border: 0.5pt solid #94a3b8; text-align: center; font-weight: bold; }}
-  td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; vertical-align: middle; font-size: 7.5pt; }}
-  .col-partida {{ width: 52pt; text-align: center; }}
-  .col-cuenta  {{ text-align: left; }}
-  .col-monto   {{ width: 70pt; text-align: right; }}
-  .row-mes td  {{ background-color: #EEF2F7; color: #0A1628; font-weight: bold;
-                  text-align: center; font-size: 8pt;
-                  border: 0.5pt solid #94a3b8; padding: 2px 5px; line-height: 1.1; }}
-  .row-fecha td {{ background-color: #EEF2F7; font-weight: bold; text-align: center;
-                   padding: 2px 4px; border: 0.5pt solid #94a3b8; line-height: 1.1; }}
-  .row-detalle td {{ background-color: #F9FAFB; font-style: italic; color: #444; padding-left: 14pt; }}
-  .row-comentario td {{ background-color: #E5E7EB; font-style: italic;
+  .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 4pt; border: none; }}
+  .enc-izq {{ text-align: center; vertical-align: middle; width: 85%; padding: 0; }}
+  .enc-der {{ text-align: right; vertical-align: top; padding: 0; font-size: 8.5pt; color: #333; white-space: nowrap; width: 15%; }}
+  .enc-titulo  {{ font-size: 13pt; font-weight: bold; margin: 0; text-align: center; }}
+  .enc-empresa {{ font-size: 10pt; font-weight: bold; margin: 1pt 0 0 0; text-align: center; }}
+  .enc-fechas  {{ font-size: 8.5pt; color: #333; margin: 1pt 0 0 0; }}
+  .enc-moneda  {{ font-size: 8pt; color: #555; margin: 1pt 0 0 0; }}
+  table {{ border-collapse: collapse; margin-top: 3px; width: 97%; margin-left: 1.5%; margin-right: 1.5%; }}
+  th {{ background-color: #EEF2F7; color: #0A1628; font-size: 9pt; padding: 2px 5px;
+        border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8;
+        text-align: center; font-weight: bold; }}
+  td {{ border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: none; border-bottom: none;
+        padding: 1px 4px; vertical-align: middle; font-size: 8.5pt; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .col-partida  {{ width: 40pt; text-align: center; }}
+  .col-cuenta   {{ text-align: left; }}
+  .col-auxiliar {{ width: 55pt; text-align: right; }}
+  .col-monto    {{ width: 60pt; text-align: right; }}
+  .row-mes td  {{ background-color: #D1D5DB; color: #0A1628; font-weight: bold;
+                  text-align: center; font-size: 9pt;
+                  border: 0.5pt solid #94a3b8; padding: 1px 5px; line-height: 1.2; }}
+  .row-fecha td {{ background-color: #D1D5DB; font-weight: bold; text-align: center;
+                   padding: 1px 4px; border: 0.5pt solid #94a3b8; line-height: 1.2; }}
+  .row-detalle td {{ font-style: italic; color: #444; padding-left: 14pt; }}
+  .row-comentario td {{ background-color: #EEF2F7; font-style: italic;
                         border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
-  .row-comentario .col-monto {{ font-weight: bold; font-style: normal; }}
-  .row-espacio td {{ border: none; height: 4pt; background: white; }}
-  .row-van td, .row-vienen td {{ background-color: #D1D5DB; font-weight: bold;
+  .row-comentario .col-monto, .row-comentario .col-auxiliar {{ font-weight: bold; font-style: normal; }}
+  .row-espacio td {{ border: none; height: 2pt; background: white; }}
+  .row-van td, .row-vienen td {{ background-color: #EEF2F7; font-weight: bold;
                                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
   .row-van .col-cuenta, .row-vienen .col-cuenta {{ text-align: right; }}
-  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold; border-top: 1pt solid #000; }}
+  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold;
+                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
   .row-total .col-cuenta {{ text-align: right; }}
 </style>
 </head>
@@ -2033,16 +2044,23 @@ def libro_diario_pdf(request):
             html += '<div class="page-break"></div>'
 
         html += f"""
-<h1>LIBRO DIARIO</h1>
-<h2>{nombre_empresa}</h2>
-<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
-Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash;
-Pagina {pagina['numero']} de {len(paginas)}</h3>
+<table class="enc-tabla">
+  <tr>
+    <td class="enc-izq">
+      <div class="enc-titulo">LIBRO DE DIARIO</div>
+      <div class="enc-empresa">{nombre_empresa}</div>
+      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; Período: {periodo.nombre}</div>
+      <div class="enc-moneda">(Expresado en Quetzales)</div>
+    </td>
+    <td class="enc-der">Página {pagina['numero']} de {len(paginas)}</td>
+  </tr>
+</table>
 <table>
 <thead>
   <tr>
     <th class="col-partida">PARTIDA</th>
     <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
+    <th class="col-auxiliar"></th>
     <th class="col-monto">DEBE</th>
     <th class="col-monto">HABER</th>
   </tr>
@@ -2053,6 +2071,7 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
             html += f"""<tr class="row-vienen">
   <td class="col-partida"></td>
   <td class="col-cuenta" style="text-align:right;">VIENEN</td>
+  <td class="col-auxiliar"></td>
   <td class="col-monto">{pagina['vienen_debe']:,.2f}</td>
   <td class="col-monto">{pagina['vienen_haber']:,.2f}</td>
 </tr>"""
@@ -2061,39 +2080,41 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
             tipo = reg['tipo']
 
             if tipo == 'separador_mes':
-                html += f'<tr class="row-mes"><td colspan="4">{reg["texto"]}</td></tr>'
+                html += f'<tr class="row-mes"><td colspan="5">{reg["texto"]}</td></tr>'
 
             elif tipo == 'fecha':
-                html += f'<tr class="row-fecha"><td colspan="4">{reg["texto"]}</td></tr>'
+                html += f'<tr class="row-fecha"><td colspan="5">{reg["texto"]}</td></tr>'
 
             elif tipo == 'espacio':
-                html += '<tr class="row-espacio"><td colspan="4"></td></tr>'
+                html += '<tr class="row-espacio"><td colspan="5"></td></tr>'
 
             elif tipo == 'movimiento':
-                partida = f"---{reg['correlativo']}---" if reg['correlativo'] else ''
+                partida = str(reg['correlativo']) if reg['correlativo'] else ''
                 debe  = f"{reg['debe']:,.2f}"  if reg['debe']  > 0 else ''
                 haber = f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
                 html += f"""<tr>
   <td class="col-partida">{partida}</td>
   <td class="col-cuenta">{reg['cuenta_nombre']}</td>
+  <td class="col-auxiliar"></td>
   <td class="col-monto">{debe}</td>
   <td class="col-monto">{haber}</td>
 </tr>"""
 
             elif tipo == 'detalle':
-                debe  = f"{reg['debe']:,.2f}"  if reg['debe']  > 0 else ''
-                haber = f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
+                aux = f"{reg['debe']:,.2f}" if reg['debe'] > 0 else f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
                 html += f"""<tr class="row-detalle">
   <td class="col-partida"></td>
   <td class="col-cuenta">{reg['cuenta_nombre']}</td>
-  <td class="col-monto">{debe}</td>
-  <td class="col-monto">{haber}</td>
+  <td class="col-auxiliar">{aux}</td>
+  <td class="col-monto"></td>
+  <td class="col-monto"></td>
 </tr>"""
 
             elif tipo == 'comentario':
                 html += f"""<tr class="row-comentario">
   <td class="col-partida"></td>
   <td class="col-cuenta">v/ {reg['cuenta_nombre']}</td>
+  <td class="col-auxiliar"></td>
   <td class="col-monto">{reg['debe']:,.2f}</td>
   <td class="col-monto">{reg['haber']:,.2f}</td>
 </tr>"""
@@ -2102,6 +2123,7 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
             html += f"""<tr class="row-van">
   <td class="col-partida"></td>
   <td class="col-cuenta" style="text-align:right;">VAN</td>
+  <td class="col-auxiliar"></td>
   <td class="col-monto">{pagina['acumulado_debe']:,.2f}</td>
   <td class="col-monto">{pagina['acumulado_haber']:,.2f}</td>
 </tr>"""
@@ -2114,6 +2136,7 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
 <tr class="row-total">
   <td class="col-partida"></td>
   <td class="col-cuenta">TOTALES GENERALES DEL PERIODO</td>
+  <td class="col-auxiliar"></td>
   <td class="col-monto">{total_debe_general:,.2f}</td>
   <td class="col-monto">{total_haber_general:,.2f}</td>
 </tr>
