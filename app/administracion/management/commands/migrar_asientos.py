@@ -176,10 +176,15 @@ class Command(BaseCommand):
         for row in self._abrir_csv(self.detalle_file):
             if len(row) < 4:
                 continue
-            id_orig = int(row[0].strip())
-            nombre  = row[1].strip()[:200] if row[1].strip() else '-'
-            monto   = row[2].strip()
-            id_mov  = int(row[3].strip())
+            try:
+                id_orig = int(float(row[0].strip()))
+                nombre  = row[1].strip()[:200] if row[1].strip() else '-'
+                monto   = row[2].strip()
+                id_mov  = int(float(row[3].strip()))
+                float(monto)  # validar que monto sea numérico
+            except (ValueError, TypeError):
+                omitidos += 1
+                continue
 
             if id_mov not in movimientos_existentes:
                 omitidos += 1
