@@ -1,9 +1,14 @@
 from decimal import Decimal
 from django.db.models import Sum, Q
+from collections import defaultdict
 
-from administracion.services.libro_mayor_service import (
-    tipo_saldo_cuenta, calcular_saldo, AREAS_SALDO_DEUDOR
-)
+from administracion.services.libro_mayor_service import tipo_saldo_cuenta
+
+MESES = {
+    1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
+    5: 'Mayo', 6: 'Junio', 7: 'Julio', 8: 'Agosto',
+    9: 'Septiembre', 10: 'Octubre', 11: 'Noviembre', 12: 'Diciembre'
+}
 
 
 class BalanceSaldosService:
@@ -11,137 +16,87 @@ class BalanceSaldosService:
     @staticmethod
     def get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta):
         """
-        Retorna una lista de grupos por área contable.
-        Cada grupo:
+        Retorna una lista de cuadros, uno por mes en el rango.
+        Cada cuadro:
         {
-            'area': AreaContable,
+            'mes': str  (ej: 'Enero del 2026'),
             'cuentas': [
                 {
-                    'cuenta': Cuenta,
-                    'tipo_saldo': 'deudor'|'acreedor',
-                    'debe_total': Decimal,
-                    'haber_total': Decimal,
-                    'saldo': Decimal,
-                    'naturaleza': 'D'|'A',
+                    'nombre': str,
+                    'debe': Decimal,
+                    'haber': Decimal,
                 }
             ],
-            'subtotal_debe': Decimal,
-            'subtotal_haber': Decimal,
-            'subtotal_saldo_deudor': Decimal,
-            'subtotal_saldo_acreedor': Decimal,
-        }
-        Y los totales generales:
-        {
             'total_debe': Decimal,
             'total_haber': Decimal,
-            'total_saldo_deudor': Decimal,
-            'total_saldo_acreedor': Decimal,
             'cuadrado': bool,
         }
         """
-        from administracion.models import Movimiento, Asiento, Cuenta, AreaContable
+        from administracion.models import Movimiento, Asiento, Cuenta
 
         asientos_rango = Asiento.objects.filter(
             id_empresa_periodo=empresa_periodo,
             estatus__in=[1, True],
             fecha__range=[fecha_desde, fecha_hasta]
-        )
+        ).order_by('fecha')
 
-        # Cuentas con movimientos en el rango
-        cuentas_ids = (
-            Movimiento.objects
-            .filter(id_asiento__in=asientos_rango)
-            .values_list('id_cuenta_id', flat=True)
-            .distinct()
-        )
+        # Agrupar asientos por mes
+        meses_dict = defaultdict(list)
+        for asiento in asientos_rango:
+            clave = (asiento.fecha.year, asiento.fecha.month)
+            meses_dict[clave].append(asiento.id)
 
-        cuentas = (
-            Cuenta.objects
-            .filter(id__in=cuentas_ids)
-            .select_related('id_subgrupo', 'id_area_contable')
-            .order_by('id_area_contable__id', 'id_subgrupo__nombre', 'nombre')
-        )
+        cuadros = []
 
-        # Agrupar por área
-        areas_dict = {}
-        for cuenta in cuentas:
-            area = cuenta.id_area_contable
-            if area.id not in areas_dict:
-                areas_dict[area.id] = {'area': area, 'cuentas': []}
+        for (año, mes_num) in sorted(meses_dict.keys()):
+            asiento_ids = meses_dict[(año, mes_num)]
+            asientos_mes = Asiento.objects.filter(id__in=asiento_ids)
 
-            tipo = tipo_saldo_cuenta(cuenta)
-
-            # Totales en el rango
-            totales = Movimiento.objects.filter(
-                id_cuenta=cuenta,
-                id_asiento__in=asientos_rango,
-            ).aggregate(
-                debe=Sum('monto', filter=Q(tipo_movimiento=1)),
-                haber=Sum('monto', filter=Q(tipo_movimiento=2)),
+            # Cuentas con movimientos en este mes
+            cuentas_ids = (
+                Movimiento.objects
+                .filter(id_asiento__in=asientos_mes)
+                .values_list('id_cuenta_id', flat=True)
+                .distinct()
             )
-            debe_rango  = totales['debe']  or Decimal('0')
-            haber_rango = totales['haber'] or Decimal('0')
 
-            # Movimientos anteriores al rango (saldo inicial)
-            ant = Movimiento.objects.filter(
-                id_cuenta=cuenta,
-                id_asiento__id_empresa_periodo=empresa_periodo,
-                id_asiento__estatus__in=[1, True],
-                id_asiento__fecha__lt=fecha_desde,
-            ).aggregate(
-                debe=Sum('monto', filter=Q(tipo_movimiento=1)),
-                haber=Sum('monto', filter=Q(tipo_movimiento=2)),
+            cuentas = (
+                Cuenta.objects
+                .filter(id__in=cuentas_ids)
+                .select_related('id_subgrupo', 'id_area_contable')
+                .order_by('nombre')
             )
-            debe_ant  = ant['debe']  or Decimal('0')
-            haber_ant = ant['haber'] or Decimal('0')
 
-            debe_total  = debe_ant  + debe_rango
-            haber_total = haber_ant + haber_rango
-            saldo = calcular_saldo(debe_total, haber_total, tipo)
-            naturaleza = 'D' if tipo == 'deudor' else 'A'
+            filas = []
+            total_debe  = Decimal('0')
+            total_haber = Decimal('0')
 
-            areas_dict[area.id]['cuentas'].append({
-                'cuenta':      cuenta,
-                'tipo_saldo':  tipo,
-                'debe_total':  debe_total,
-                'haber_total': haber_total,
-                'saldo':       saldo,
-                'naturaleza':  naturaleza,
+            for cuenta in cuentas:
+                totales = Movimiento.objects.filter(
+                    id_cuenta=cuenta,
+                    id_asiento__in=asientos_mes,
+                ).aggregate(
+                    debe=Sum('monto', filter=Q(tipo_movimiento=1)),
+                    haber=Sum('monto', filter=Q(tipo_movimiento=2)),
+                )
+                debe  = totales['debe']  or Decimal('0')
+                haber = totales['haber'] or Decimal('0')
+
+                total_debe  += debe
+                total_haber += haber
+
+                filas.append({
+                    'nombre': cuenta.nombre,
+                    'debe':   debe,
+                    'haber':  haber,
+                })
+
+            cuadros.append({
+                'mes':         f"{MESES[mes_num]} del {año}",
+                'cuentas':     filas,
+                'total_debe':  total_debe,
+                'total_haber': total_haber,
+                'cuadrado':    total_debe == total_haber,
             })
 
-        # Calcular subtotales por área y totales generales
-        grupos = []
-        total_debe            = Decimal('0')
-        total_haber           = Decimal('0')
-        total_saldo_deudor    = Decimal('0')
-        total_saldo_acreedor  = Decimal('0')
-
-        for area_data in areas_dict.values():
-            sub_debe   = sum(c['debe_total']  for c in area_data['cuentas'])
-            sub_haber  = sum(c['haber_total'] for c in area_data['cuentas'])
-            sub_deudor    = sum(c['saldo'] for c in area_data['cuentas'] if c['naturaleza'] == 'D')
-            sub_acreedor  = sum(c['saldo'] for c in area_data['cuentas'] if c['naturaleza'] == 'A')
-
-            grupos.append({
-                'area':                    area_data['area'],
-                'cuentas':                 area_data['cuentas'],
-                'subtotal_debe':           sub_debe,
-                'subtotal_haber':          sub_haber,
-                'subtotal_saldo_deudor':   sub_deudor,
-                'subtotal_saldo_acreedor': sub_acreedor,
-            })
-
-            total_debe           += sub_debe
-            total_haber          += sub_haber
-            total_saldo_deudor   += sub_deudor
-            total_saldo_acreedor += sub_acreedor
-
-        totales = {
-            'total_debe':           total_debe,
-            'total_haber':          total_haber,
-            'total_saldo_deudor':   total_saldo_deudor,
-            'total_saldo_acreedor': total_saldo_acreedor,
-            'cuadrado':             total_debe == total_haber,
-        }
-
-        return grupos, totales
+        return cuadros

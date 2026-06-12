@@ -39,17 +39,26 @@
     }
     .mayor-table {
         width: 100%; border-collapse: collapse;
-        font-family: 'Courier New', monospace; font-size: 11px;
+        font-family: Arial, Helvetica, sans-serif; font-size: 12px;
         table-layout: fixed;
     }
-    .mayor-table th, .mayor-table td {
-        border: 1px solid #000; padding: 3px 6px; vertical-align: middle;
+    /* Solo bordes verticales en filas normales */
+    .mayor-table td {
+        border-left:  1px solid #94a3b8;
+        border-right: 1px solid #94a3b8;
+        border-top:   none;
+        border-bottom: none;
+        padding: 3px 6px; vertical-align: middle;
     }
     .mayor-table th {
-        background: #1B2B4E; color: white;
-        font-size: 10px; text-align: center; font-weight: bold;
+        background: #EEF2F7; color: #0A1628;
+        font-size: 11px; text-align: center; font-weight: bold;
+        border: 0.5px solid #94a3b8;
+        border-bottom: 1.5px solid #94a3b8;
+        padding: 4px 6px;
     }
-    .col-fecha    { width: 80px; text-align: center; }
+    .col-mes      { width: 75px; text-align: left; }
+    .col-dia      { width: 35px; text-align: center; }
     .col-partida  { width: 65px; text-align: center; }
     .col-desc     { text-align: left; }
     .col-monto    { width: 110px; text-align: right; font-family: monospace; }
@@ -57,22 +66,26 @@
 
     /* Encabezado de cuenta */
     tr.cuenta-header td {
-        background: #1B2B4E; color: #F4B41A;
-        font-weight: bold; font-size: 11px;
-        border-top: 2px solid #C5A028; border-bottom: 1px solid #C5A028;
+        background: #d1d5db; color: #0A1628;
+        font-weight: bold; font-size: 12px;
+        border: 0.5px solid #94a3b8;
+        border-bottom: 1.5px solid #94a3b8;
         padding: 5px 8px;
     }
     /* Saldo anterior */
     tr.saldo-anterior-row td {
-        background: #f1f5f9; font-style: italic;
-        color: #475569; font-size: 10px;
+        background: #EEF2F7; font-style: italic;
+        color: #475569; font-size: 11px;
+        border-left: 1px solid #94a3b8;
+        border-right: 1px solid #94a3b8;
+        border-top: none; border-bottom: none;
     }
-    /* Fila normal */
+    /* Fila normal alternada */
     tr.movimiento-row:nth-child(even) td { background: #fafafa; }
     /* Totales de cuenta */
     tr.totales-cuenta td {
-        background: #e5e7eb; font-weight: bold;
-        border-top: 1.5px solid #000; border-bottom: 2px solid #000;
+        background: #EEF2F7; font-weight: bold;
+        border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
     }
     tr.totales-cuenta td.col-saldo { color: #065f46; }
 
@@ -199,36 +212,37 @@
     {% for pagina in paginas %}
     <div class="mayor-wrapper">
 
-        <div style="text-align:center;margin-bottom:14px;">
-            <strong style="font-family:monospace;font-size:14px;color:#0A1628;">LIBRO MAYOR</strong><br>
-            <span style="font-family:monospace;font-size:11px;">
-                {{ empresa.nombre_comercial|default:empresa.razon_social }}
-            </span><br>
-            <span style="font-family:monospace;font-size:10px;color:#475569;">
-                Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
-                &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
-                &nbsp;&mdash;&nbsp; Página {{ pagina.numero }} de {{ paginas|length }}
-            </span>
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+            <div style="flex:1;text-align:center;">
+                <strong style="font-family:Arial,sans-serif;font-size:15px;color:#0A1628;display:block;margin-bottom:2px;">LIBRO MAYOR</strong>
+                <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;display:block;margin-bottom:2px;">
+                    {{ empresa.razon_social|default:empresa.nombre_comercial }}
+                </span>
+                <span style="font-family:Arial,sans-serif;font-size:10px;color:#333;display:block;margin-bottom:1px;">
+                    Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+                </span>
+                <span style="font-family:Arial,sans-serif;font-size:9px;color:#555;display:block;">
+                    (Expresado en Quetzales)
+                </span>
+            </div>
+            <div style="font-family:Arial,sans-serif;font-size:11px;color:#475569;white-space:nowrap;padding-top:2px;">
+                Folio No. {{ pagina.numero }}
+            </div>
         </div>
 
         {% for bloque in pagina.bloques %}
         <table class="mayor-table" style="margin-bottom:12px;">
             <thead>
                 <tr class="cuenta-header">
-                    <td colspan="6">
-                        {{ bloque.cuenta.id_area_contable.nombre }} &rsaquo;
-                        {{ bloque.cuenta.id_subgrupo.nombre }} &rsaquo;
+                    <td colspan="7">
                         <strong>{{ bloque.cuenta.nombre }}</strong>
-                        &nbsp;&nbsp;
-                        <span style="font-size:9px;font-weight:normal;color:#F4B41A;">
-                            (Saldo natural: {{ bloque.tipo_saldo }})
-                        </span>
                     </td>
                 </tr>
                 <tr>
-                    <th class="col-fecha">FECHA</th>
+                    <th class="col-mes">MES</th>
+                    <th class="col-dia">DÍA</th>
                     <th class="col-partida">PARTIDA</th>
-                    <th class="col-desc">DESCRIPCIÓN</th>
+                    <th class="col-desc">NOMBRE</th>
                     <th class="col-monto">DEBE</th>
                     <th class="col-monto">HABER</th>
                     <th class="col-saldo">SALDO</th>
@@ -237,7 +251,8 @@
             <tbody>
                 {% if bloque.saldo_anterior != 0 %}
                 <tr class="saldo-anterior-row">
-                    <td class="col-fecha"></td>
+                    <td class="col-mes"></td>
+                    <td class="col-dia"></td>
                     <td class="col-partida"></td>
                     <td class="col-desc">Saldo anterior al {{ fecha_desde|date:"d/m/Y" }}</td>
                     <td class="col-monto"></td>
@@ -248,7 +263,8 @@
 
                 {% for fila in bloque.filas %}
                 <tr class="movimiento-row">
-                    <td class="col-fecha">{{ fila.texto_fecha }}</td>
+                    <td class="col-mes">{{ fila.texto_mes }}</td>
+                    <td class="col-dia">{{ fila.texto_dia }}</td>
                     <td class="col-partida">{{ fila.correlativo }}</td>
                     <td class="col-desc">{{ fila.descripcion }}</td>
                     <td class="col-monto">{% if fila.debe > 0 %}{{ fila.debe|monto }}{% endif %}</td>
@@ -258,7 +274,8 @@
                 {% endfor %}
 
                 <tr class="totales-cuenta">
-                    <td class="col-fecha"></td>
+                    <td class="col-mes"></td>
+                    <td class="col-dia"></td>
                     <td class="col-partida"></td>
                     <td class="col-desc" style="text-align:right;">TOTALES</td>
                     <td class="col-monto">{{ bloque.total_debe|monto }}</td>

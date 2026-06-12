@@ -2350,7 +2350,7 @@ def estado_resultados_pdf(request):
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     def render_seccion(titulo, grupos, total):
         html = f'<tr class="sec-hdr"><td colspan="2">{titulo}</td></tr>'
@@ -2375,19 +2375,28 @@ def estado_resultados_pdf(request):
 <html><head><meta charset="utf-8">
 <style>
   @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
-  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
-  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
-  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
-  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
-  table {{ width: 70%; margin: 0 auto; border-collapse: collapse; }}
-  td {{ border: 0.5pt solid #94a3b8; padding: 2px 6px; font-size: 7.5pt; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; }}
+  .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 6pt; border: none; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .enc-titulo  {{ font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }}
+  .enc-empresa {{ font-size: 10pt; font-weight: bold; text-align: center; margin: 1pt 0 0 0; }}
+  .enc-fechas  {{ font-size: 8.5pt; color: #333; text-align: center; margin: 1pt 0 0 0; }}
+  .enc-moneda  {{ font-size: 8pt; color: #555; text-align: center; margin: 1pt 0 0 0; }}
+  table.detalle {{ width: 70%; margin: 0 auto; border-collapse: collapse; }}
+  td {{ border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: none; border-bottom: none;
+        padding: 2px 6px; font-size: 8pt; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
   .num {{ text-align: right; width: 80pt; }}
   .ind {{ padding-left: 16pt; }}
-  .sec-hdr td {{ background-color: #1B2B4E; color: white; font-weight: bold;
-                  font-size: 8.5pt; padding: 4px 6px; border-top: 1pt solid #C5A028; }}
-  .sg-hdr  td {{ background-color: #EEF2F7; font-weight: bold; padding: 2px 6px; }}
-  .alt     td {{ background-color: #F9FAFB; }}
-  .sg-tot  td {{ background-color: #E5E7EB; font-weight: bold; border-top: 0.8pt solid #000; }}
+  .sec-hdr td {{ background-color: #D1D5DB; color: #0A1628; font-weight: bold;
+                  font-size: 8.5pt; padding: 3px 6px;
+                  border: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8; }}
+  .sg-hdr  td {{ background-color: #EEF2F7; font-weight: bold; padding: 2px 6px;
+                  border: 0.5pt solid #94a3b8; }}
+  .alt     td {{ background-color: #FAFAFA; }}
+  .sg-tot  td {{ background-color: #EEF2F7; font-weight: bold;
+                  border-top: 0.8pt solid #000; border-bottom: none; }}
   .sec-tot td {{ background-color: #D1D5DB; font-weight: bold;
                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; font-size: 8.5pt; }}
   .sep     td {{ border: none; height: 6pt; background: white; }}
@@ -2396,10 +2405,17 @@ def estado_resultados_pdf(request):
   .perd    td {{ background-color: #FEE2E2; color: #991B1B; font-weight: bold;
                   border-top: 1.5pt solid #000; border-bottom: 2pt double #000; font-size: 9pt; }}
 </style></head><body>
-<h1>ESTADO DE RESULTADOS</h1>
-<h2>{nombre_empresa}</h2>
-<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; (Expresado en Quetzales)</h3>
-<table>
+<table class="enc-tabla">
+  <tr>
+    <td>
+      <div class="enc-titulo">ESTADO DE RESULTADOS</div>
+      <div class="enc-empresa">{nombre_empresa}</div>
+      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}</div>
+      <div class="enc-moneda">(Expresado en Quetzales)</div>
+    </td>
+  </tr>
+</table>
+<table class="detalle">
 <tbody>
 {render_seccion('INGRESOS', datos['ingresos']['grupos'], datos['ingresos']['total'])}
 {render_seccion('EGRESOS',  datos['egresos']['grupos'],  datos['egresos']['total'])}
@@ -2703,7 +2719,7 @@ def balance_general_pdf(request):
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     def filas_activo():
         rows = ''
@@ -2749,32 +2765,48 @@ def balance_general_pdf(request):
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
-  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; margin: 0; }}
-  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
-  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
-  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
+  @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; margin: 0; }}
+  .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 6pt; border: none; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .enc-titulo  {{ font-size: 13pt; font-weight: bold; text-align: center; margin: 0; }}
+  .enc-empresa {{ font-size: 10pt; font-weight: bold; text-align: center; margin: 1pt 0 0 0; }}
+  .enc-fechas  {{ font-size: 8.5pt; color: #333; text-align: center; margin: 1pt 0 0 0; }}
+  .enc-moneda  {{ font-size: 8pt; color: #555; text-align: center; margin: 1pt 0 0 0; }}
   .columnas {{ width: 100%; border-collapse: collapse; }}
-  .col-activo, .col-pasivo {{ width: 49%; vertical-align: top; padding: 0 4pt; }}
-  .sep {{ width: 2%; }}
-  table.detalle {{ width: 100%; border-collapse: collapse; font-size: 7.5pt; }}
-  table.detalle td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; }}
+  .col-activo, .col-pasivo {{ width: 49%; vertical-align: top; padding: 0 3pt; }}
+  .sep-col {{ width: 2%; }}
+  table.detalle {{ width: 100%; border-collapse: collapse; font-size: 8pt; }}
+  table.detalle td {{ border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+                      border-top: none; border-bottom: none; padding: 1px 4px; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
   .col-hdr td {{ background-color: #1B2B4E; color: white; font-weight: bold;
-                  text-align: center; font-size: 8pt; padding: 3px; border: 0.5pt solid #000; }}
-  .sec-hdr td {{ background-color: #EEF2F7; font-weight: bold; font-size: 7.5pt;
-                  border: 0.5pt solid #94a3b8; padding: 2px 5px; }}
-  .alt td {{ background-color: #F9FAFB; }}
-  .ind {{ padding-left: 14pt !important; }}
+                  text-align: center; font-size: 8.5pt; padding: 3px;
+                  border: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8; }}
+  .sec-hdr td {{ background-color: #D1D5DB; font-weight: bold; font-size: 8pt;
+                  border: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8; padding: 2px 5px; }}
+  .alt td {{ background-color: #FAFAFA; }}
+  .ind {{ padding-left: 12pt !important; }}
   .num {{ text-align: right; }}
-  .sub td  {{ background-color: #E5E7EB; font-weight: bold; border-top: 0.8pt solid #000; }}
-  .sub2 td {{ background-color: #D1D5DB; font-weight: bold; border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
-  .tot td  {{ background-color: #1B2B4E; color: white; font-weight: bold; border-top: 1.5pt solid #C5A028; }}
+  .sub  td {{ background-color: #EEF2F7; font-weight: bold;
+              border-top: 0.8pt solid #000; border-bottom: none; }}
+  .sub2 td {{ background-color: #D1D5DB; font-weight: bold;
+              border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
+  .tot  td {{ background-color: #1B2B4E; color: white; font-weight: bold;
+              border-top: 1.5pt solid #000; border-bottom: 1.5pt solid #000; }}
   .util td {{ background-color: #D1FAE5; color: #065F46; font-weight: bold; }}
   .perd td {{ background-color: #FEE2E2; color: #991B1B; font-weight: bold; }}
 </style></head><body>
-<h1>BALANCE GENERAL</h1>
-<h2>{nombre_empresa}</h2>
-<h3>Al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; (Expresado en Quetzales)</h3>
+<table class="enc-tabla">
+  <tr>
+    <td>
+      <div class="enc-titulo">BALANCE GENERAL</div>
+      <div class="enc-empresa">{nombre_empresa}</div>
+      <div class="enc-fechas">Al {fecha_hasta.strftime('%d/%m/%Y')}</div>
+      <div class="enc-moneda">(Expresado en Quetzales)</div>
+    </td>
+  </tr>
+</table>
 <table class="columnas">
 <tr>
   <td class="col-activo">
@@ -2783,7 +2815,7 @@ def balance_general_pdf(request):
       {filas_activo()}
     </table>
   </td>
-  <td class="sep"></td>
+  <td class="sep-col"></td>
   <td class="col-pasivo">
     <table class="detalle">
       {filas_pasivo_capital()}
@@ -2815,14 +2847,14 @@ def _get_balance_saldos_datos(request):
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None, None, None
+        return None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None, None, None
+        return None, None, None, None, None
 
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -2837,19 +2869,19 @@ def _get_balance_saldos_datos(request):
     except ValueError:
         fecha_hasta = periodo.fecha_final
 
-    grupos, totales = BalanceSaldosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
-    return empresa, periodo, fecha_desde, fecha_hasta, grupos, totales
+    cuadros = BalanceSaldosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
+    return empresa, periodo, fecha_desde, fecha_hasta, cuadros
 
 
 @login_required
 def balance_saldos(request):
-    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    if not grupos:
+    if not cuadros:
         return render(request, 'administracion/reportes/balance_saldos.html', {
             'sin_datos': True,
             'empresa': empresa,
@@ -2858,17 +2890,13 @@ def balance_saldos(request):
             'fecha_hasta': fecha_hasta,
         })
 
-    total_cuentas = sum(len(g['cuentas']) for g in grupos)
-
     return render(request, 'administracion/reportes/balance_saldos.html', {
         'sin_datos': False,
         'empresa': empresa,
         'periodo': periodo,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
-        'grupos': grupos,
-        'totales': totales,
-        'total_cuentas': total_cuentas,
+        'cuadros': cuadros,
         'fecha_reporte': timezone.now(),
     })
 
@@ -2879,11 +2907,13 @@ def balance_saldos_excel(request):
 
     empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
 
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
+
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    if not grupos:
+    if not cuadros:
         messages.warning(request, 'No hay datos para exportar')
         return redirect('balance_saldos')
 
@@ -2894,6 +2924,7 @@ def balance_saldos_excel(request):
     fnt_titulo = Font(bold=True, size=13)
     fnt_bold   = Font(bold=True, size=10)
     fnt_normal = Font(size=10)
+    fnt_white  = Font(bold=True, size=10, color='FFFFFF')
 
     aln_center = Alignment(horizontal='center', vertical='center')
     aln_right  = Alignment(horizontal='right',  vertical='center')
@@ -2904,32 +2935,23 @@ def balance_saldos_excel(request):
         top=Side(style='thin'),  bottom=Side(style='thin')
     )
 
-    fill_header   = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
-    fill_area     = PatternFill(start_color='243B67', end_color='243B67', fill_type='solid')
-    fill_subtotal = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
-    fill_total    = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
-    fill_alt      = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
-
-    fnt_white = Font(bold=True, size=10, color='FFFFFF')
-    fnt_gold  = Font(bold=True, size=10, color='F4B41A')
-    fnt_deudor   = Font(bold=True, size=10, color='1E40AF')
-    fnt_acreedor = Font(bold=True, size=10, color='065F46')
+    fill_header = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
+    fill_mes    = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
+    fill_sumas  = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
+    fill_alt    = PatternFill(start_color='FAFAFA', end_color='FAFAFA', fill_type='solid')
 
     ws.column_dimensions['A'].width = 50
-    ws.column_dimensions['B'].width = 16
-    ws.column_dimensions['C'].width = 16
-    ws.column_dimensions['D'].width = 16
-    ws.column_dimensions['E'].width = 16
-    ws.column_dimensions['F'].width = 6
+    ws.column_dimensions['B'].width = 18
+    ws.column_dimensions['C'].width = 18
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
     fila = 1
 
     def merge(r, val, fuente, relleno, altura=14):
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
         cl = ws.cell(row=r, column=1, value=val)
         cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
-        for c in range(1, 7): ws.cell(row=r, column=c).border = borde
+        for c in range(1, 4): ws.cell(row=r, column=c).border = borde
         ws.row_dimensions[r].height = altura
 
     def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None):
@@ -2944,53 +2966,35 @@ def balance_saldos_excel(request):
     merge(fila, 'BALANCE DE SALDOS', fnt_titulo, PatternFill(fill_type=None), 18); fila += 1
     merge(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None)); fila += 1
     merge(fila,
-        f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — "
-        f"Período: {periodo.nombre} — (Expresado en Quetzales)",
+        f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)",
         Font(size=9), PatternFill(fill_type=None), 12)
     fila += 2
 
-    # Encabezados de columna
-    for c, txt in enumerate(['NOMBRE DE LA CUENTA', 'DEBE', 'HABER', 'SALDO DEUDOR', 'SALDO ACREEDOR', 'N'], 1):
-        cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_header)
-    ws.row_dimensions[fila].height = 14; fila += 1
+    for cuadro in cuadros:
+        # Encabezado mes
+        merge(fila, cuadro['mes'], fnt_bold, fill_mes, 13); fila += 1
 
-    for grupo in grupos:
-        # Encabezado área
-        merge(fila, grupo['area'].nombre.upper(), fnt_gold, fill_area, 13); fila += 1
+        # Encabezados columna
+        cel(fila, 1, 'Nombre de la Cuenta', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+        cel(fila, 2, 'Debe',  fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+        cel(fila, 3, 'Haber', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+        ws.row_dimensions[fila].height = 14; fila += 1
 
-        for i, c in enumerate(grupo['cuentas']):
+        for i, c in enumerate(cuadro['cuentas']):
             rf = fill_alt if i % 2 == 1 else None
-            cel(fila, 1, c['cuenta'].nombre, fuente=fnt_normal, aln=aln_left, relleno=rf)
-            cel(fila, 2, float(c['debe_total']),  fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 3, float(c['haber_total']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            if c['naturaleza'] == 'D':
-                cel(fila, 4, float(c['saldo']), fuente=fnt_deudor, aln=aln_right, relleno=rf, fmt='#,##0.00')
-                cel(fila, 5, '', relleno=rf)
-            else:
-                cel(fila, 4, '', relleno=rf)
-                cel(fila, 5, float(c['saldo']), fuente=fnt_acreedor, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 6, c['naturaleza'], fuente=fnt_deudor if c['naturaleza'] == 'D' else fnt_acreedor, aln=aln_center, relleno=rf)
+            cel(fila, 1, c['nombre'],             fuente=fnt_normal, aln=aln_left,  relleno=rf)
+            cel(fila, 2, float(c['debe'])  if c['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 3, float(c['haber']) if c['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
             fila += 1
 
-        # Subtotal
-        cel(fila, 1, f"Subtotal {grupo['area'].nombre}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal)
-        cel(fila, 2, float(grupo['subtotal_debe']),           fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
-        cel(fila, 3, float(grupo['subtotal_haber']),          fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
-        cel(fila, 4, float(grupo['subtotal_saldo_deudor']),   fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
-        cel(fila, 5, float(grupo['subtotal_saldo_acreedor']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtotal, fmt='#,##0.00')
-        cel(fila, 6, '', relleno=fill_subtotal)
+        # Sumas iguales
+        cel(fila, 1, 'Sumas Iguales', fuente=fnt_bold, aln=aln_right,  relleno=fill_sumas)
+        cel(fila, 2, float(cuadro['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00')
+        cel(fila, 3, float(cuadro['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00')
         fila += 2
 
-    # Totales generales
-    cel(fila, 1, 'TOTALES GENERALES', fuente=fnt_white, aln=aln_right, relleno=fill_total)
-    cel(fila, 2, float(totales['total_debe']),           fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-    cel(fila, 3, float(totales['total_haber']),          fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-    cel(fila, 4, float(totales['total_saldo_deudor']),   fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-    cel(fila, 5, float(totales['total_saldo_acreedor']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-    cel(fila, 6, '✓' if totales['cuadrado'] else '✗',   fuente=fnt_white, aln=aln_center, relleno=fill_total)
-
     ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
-    ws.page_setup.orientation = 'landscape'
+    ws.page_setup.orientation = 'portrait'
     ws.page_setup.fitToPage   = True
     ws.page_setup.fitToWidth  = 1
 
@@ -3011,96 +3015,86 @@ def balance_saldos_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado.')
         return redirect('balance_saldos')
 
-    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    if not grupos:
+    if not cuadros:
         messages.warning(request, 'No hay datos para exportar')
         return redirect('balance_saldos')
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
-    cuadrado_txt = 'CUADRADO' if totales['cuadrado'] else 'NO CUADRA'
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
-  body {{ font-family: Courier, monospace; font-size: 8pt; color: #000; }}
-  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
-  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
-  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
-  table {{ width: 100%; border-collapse: collapse; }}
-  th {{ background-color: #1B2B4E; color: white; font-size: 7.5pt; padding: 3px 5px;
-        border: 0.5pt solid #000; text-align: center; font-weight: bold; }}
-  td {{ border: 0.5pt solid #94a3b8; padding: 2px 5px; vertical-align: middle; font-size: 7.5pt; }}
+  @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; }}
+  .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 4pt; border: none; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .enc-izq {{ text-align: center; vertical-align: middle; width: 100%; padding: 0; }}
+  .enc-titulo  {{ font-size: 13pt; font-weight: bold; text-align: center; }}
+  .enc-empresa {{ font-size: 10pt; font-weight: bold; text-align: center; }}
+  .enc-fechas  {{ font-size: 8.5pt; color: #333; text-align: center; }}
+  .enc-moneda  {{ font-size: 8pt; color: #555; text-align: center; margin-bottom: 6pt; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 10pt; }}
+  th {{ background-color: #EEF2F7; color: #0A1628; font-size: 8pt; padding: 2px 5px;
+        border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8;
+        text-align: center; font-weight: bold; }}
+  td {{ border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: none; border-bottom: none;
+        padding: 1px 4px; vertical-align: middle; font-size: 8pt; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
   .col-cuenta {{ text-align: left; }}
-  .col-monto  {{ width: 65pt; text-align: right; }}
-  .col-nat    {{ width: 18pt; text-align: center; font-weight: bold; }}
-  .row-area td {{ background-color: #243B67; color: #F4B41A; font-weight: bold;
-                  font-size: 8pt; border-top: 1pt solid #C5A028; padding: 3px 5px; }}
-  .row-alt td  {{ background-color: #F9FAFB; }}
-  .row-sub td  {{ background-color: #E5E7EB; font-weight: bold;
-                  border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
-  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold;
-                   border-top: 1.5pt solid #C5A028; }}
-  .d {{ color: #1E40AF; font-weight: bold; }}
-  .a {{ color: #065F46; font-weight: bold; }}
+  .col-monto  {{ width: 70pt; text-align: right; }}
+  .row-mes td {{ background-color: #D1D5DB; color: #0A1628; font-weight: bold;
+                 text-align: center; border: 0.5pt solid #94a3b8;
+                 border-bottom: 1pt solid #94a3b8; padding: 2px 5px; }}
+  .row-alt td  {{ background-color: #FAFAFA; }}
+  .row-sumas td {{ background-color: #EEF2F7; font-weight: bold;
+                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
 </style></head><body>
-<h1>BALANCE DE SALDOS</h1>
-<h2>{nombre_empresa}</h2>
-<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
-Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash; {cuadrado_txt}</h3>
-<table>
-<thead>
+<table class="enc-tabla">
   <tr>
-    <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
-    <th class="col-monto">DEBE</th>
-    <th class="col-monto">HABER</th>
-    <th class="col-monto">SALDO DEUDOR</th>
-    <th class="col-monto">SALDO ACREEDOR</th>
-    <th class="col-nat">N</th>
+    <td class="enc-izq">
+      <div class="enc-titulo">BALANCE DE SALDOS</div>
+      <div class="enc-empresa">{nombre_empresa}</div>
+      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}</div>
+      <div class="enc-moneda">(Expresado en Quetzales)</div>
+    </td>
   </tr>
-</thead>
-<tbody>
+</table>
 """
-    for grupo in grupos:
-        html += f'<tr class="row-area"><td colspan="6">{grupo["area"].nombre.upper()}</td></tr>'
 
-        for j, c in enumerate(grupo['cuentas']):
-            cls = 'row-alt' if j % 2 == 1 else ''
-            s_d = f"{c['saldo']:,.2f}" if c['naturaleza'] == 'D' else ''
-            s_a = f"{c['saldo']:,.2f}" if c['naturaleza'] == 'A' else ''
-            nat_cls = 'd' if c['naturaleza'] == 'D' else 'a'
-            html += f"""<tr class="{cls}">
-  <td class="col-cuenta">{c['cuenta'].nombre}</td>
-  <td class="col-monto">{c['debe_total']:,.2f}</td>
-  <td class="col-monto">{c['haber_total']:,.2f}</td>
-  <td class="col-monto {nat_cls if c['naturaleza']=='D' else ''}">{s_d}</td>
-  <td class="col-monto {nat_cls if c['naturaleza']=='A' else ''}">{s_a}</td>
-  <td class="col-nat {nat_cls}">{c['naturaleza']}</td>
-</tr>"""
-
-        html += f"""<tr class="row-sub">
-  <td class="col-cuenta" style="text-align:right;">Subtotal {grupo['area'].nombre}</td>
-  <td class="col-monto">{grupo['subtotal_debe']:,.2f}</td>
-  <td class="col-monto">{grupo['subtotal_haber']:,.2f}</td>
-  <td class="col-monto">{grupo['subtotal_saldo_deudor']:,.2f}</td>
-  <td class="col-monto">{grupo['subtotal_saldo_acreedor']:,.2f}</td>
-  <td class="col-nat"></td>
-</tr>"""
-
-    html += f"""<tr class="row-total">
-  <td class="col-cuenta" style="text-align:right;">TOTALES GENERALES</td>
-  <td class="col-monto">{totales['total_debe']:,.2f}</td>
-  <td class="col-monto">{totales['total_haber']:,.2f}</td>
-  <td class="col-monto">{totales['total_saldo_deudor']:,.2f}</td>
-  <td class="col-monto">{totales['total_saldo_acreedor']:,.2f}</td>
-  <td class="col-nat">{'OK' if totales['cuadrado'] else 'ERR'}</td>
+    for cuadro in cuadros:
+        html += f"""<table>
+<tr class="row-mes"><td colspan="3">{cuadro['mes']}</td></tr>
+<tr>
+  <th class="col-cuenta">Nombre de la Cuenta</th>
+  <th class="col-monto">Debe</th>
+  <th class="col-monto">Haber</th>
 </tr>
-</tbody></table></body></html>"""
+"""
+        for j, c in enumerate(cuadro['cuentas']):
+            cls  = 'row-alt' if j % 2 == 1 else ''
+            debe  = f"{c['debe']:,.2f}"  if c['debe']  > 0 else ''
+            haber = f"{c['haber']:,.2f}" if c['haber'] > 0 else ''
+            html += f"""<tr class="{cls}">
+  <td class="col-cuenta">{c['nombre']}</td>
+  <td class="col-monto">{debe}</td>
+  <td class="col-monto">{haber}</td>
+</tr>"""
+
+        html += f"""<tr class="row-sumas">
+  <td class="col-cuenta" style="text-align:right;">Sumas Iguales</td>
+  <td class="col-monto">{cuadro['total_debe']:,.2f}</td>
+  <td class="col-monto">{cuadro['total_haber']:,.2f}</td>
+</tr></table>"""
+
+    html += '</body></html>'
 
     buffer = BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
@@ -3116,7 +3110,6 @@ Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash; {cuadrado_txt
 
 
 # ==================== LIBRO MAYOR ====================
-
 def _get_libro_mayor_datos(request):
     from administracion.services.libro_mayor_service import LibroMayorService
 
@@ -3228,15 +3221,16 @@ def libro_mayor_excel(request):
     ws.column_dimensions['D'].width = 16
     ws.column_dimensions['E'].width = 16
     ws.column_dimensions['F'].width = 16
+    ws.column_dimensions['G'].width = 16
 
     fila = 1
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     def merge_row(r, valor, fuente, relleno, altura=14):
-        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=6)
+        ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=7)
         cl = ws.cell(row=r, column=1, value=valor)
         cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
-        for c in range(1, 7): ws.cell(row=r, column=c).border = borde
+        for c in range(1, 8): ws.cell(row=r, column=c).border = borde
         ws.row_dimensions[r].height = altura
 
     def cel(r, c, valor='', fuente=None, aln=None, relleno=None, fmt=None):
@@ -3258,39 +3252,42 @@ def libro_mayor_excel(request):
 
     for bloque in bloques:
         cuenta = bloque['cuenta']
-        nombre_cuenta = f"{cuenta.id_area_contable.nombre} › {cuenta.id_subgrupo.nombre} › {cuenta.nombre}"
+        nombre_cuenta = cuenta.nombre
 
         merge_row(fila, nombre_cuenta, fnt_gold, fill_cuenta, 15); fila += 1
 
-        for c, txt in enumerate(['FECHA', 'PARTIDA', 'DESCRIPCIÓN', 'DEBE', 'HABER', 'SALDO'], 1):
+        for c, txt in enumerate(['MES', 'DÍA', 'PARTIDA', 'NOMBRE', 'DEBE', 'HABER', 'SALDO'], 1):
             cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_col_hdr)
         ws.row_dimensions[fila].height = 14; fila += 1
 
         if bloque['saldo_anterior'] != Decimal('0'):
             cel(fila, 1, '', relleno=fill_ant)
             cel(fila, 2, '', relleno=fill_ant)
-            cel(fila, 3, f"Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}", fuente=fnt_italica, aln=aln_left, relleno=fill_ant)
-            cel(fila, 4, '', relleno=fill_ant)
+            cel(fila, 3, '', relleno=fill_ant)
+            cel(fila, 4, f"Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}", fuente=fnt_italica, aln=aln_left, relleno=fill_ant)
             cel(fila, 5, '', relleno=fill_ant)
-            cel(fila, 6, float(bloque['saldo_anterior']), fuente=fnt_bold, aln=aln_right, relleno=fill_ant, fmt='#,##0.00')
+            cel(fila, 6, '', relleno=fill_ant)
+            cel(fila, 7, float(bloque['saldo_anterior']), fuente=fnt_bold, aln=aln_right, relleno=fill_ant, fmt='#,##0.00')
             fila += 1
 
         for i, f_mov in enumerate(bloque['filas']):
             rf = fill_alt if i % 2 == 1 else None
-            cel(fila, 1, f_mov['texto_fecha'],  fuente=fnt_normal, aln=aln_center, relleno=rf)
-            cel(fila, 2, f_mov['correlativo'],  fuente=fnt_normal, aln=aln_center, relleno=rf)
-            cel(fila, 3, f_mov['descripcion'],  fuente=fnt_normal, aln=aln_left,   relleno=rf)
-            cel(fila, 4, float(f_mov['debe'])  if f_mov['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 5, float(f_mov['haber']) if f_mov['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 6, float(f_mov['saldo']), fuente=fnt_bold, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 1, f_mov['texto_mes'],   fuente=fnt_normal, aln=aln_left,   relleno=rf)
+            cel(fila, 2, f_mov['texto_dia'],   fuente=fnt_normal, aln=aln_center, relleno=rf)
+            cel(fila, 3, f_mov['correlativo'], fuente=fnt_normal, aln=aln_center, relleno=rf)
+            cel(fila, 4, f_mov['descripcion'], fuente=fnt_normal, aln=aln_left,   relleno=rf)
+            cel(fila, 5, float(f_mov['debe'])  if f_mov['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 6, float(f_mov['haber']) if f_mov['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+            cel(fila, 7, float(f_mov['saldo']), fuente=fnt_bold, aln=aln_right, relleno=rf, fmt='#,##0.00')
             fila += 1
 
         cel(fila, 1, '', relleno=fill_total)
         cel(fila, 2, '', relleno=fill_total)
-        cel(fila, 3, 'TOTALES', fuente=fnt_bold, aln=aln_right, relleno=fill_total)
-        cel(fila, 4, float(bloque['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-        cel(fila, 5, float(bloque['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-        cel(fila, 6, float(bloque['saldo_final']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        cel(fila, 3, '', relleno=fill_total)
+        cel(fila, 4, 'TOTALES', fuente=fnt_bold, aln=aln_right, relleno=fill_total)
+        cel(fila, 5, float(bloque['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        cel(fila, 6, float(bloque['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+        cel(fila, 7, float(bloque['saldo_final']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
         fila += 2
 
     ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
@@ -3325,33 +3322,45 @@ def libro_mayor_pdf(request):
         messages.warning(request, 'No hay datos para exportar')
         return redirect('libro_mayor')
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  @page {{ size: letter landscape; margin: 1.2cm 1.5cm; }}
-  body {{ font-family: Courier, monospace; font-size: 7.5pt; color: #000; }}
+  @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
+  body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; }}
   .page-break {{ page-break-before: always; }}
-  h1 {{ font-size: 11pt; text-align: center; margin: 0 0 2px; }}
-  h2 {{ font-size: 9pt; text-align: center; margin: 0 0 2px; font-weight: normal; }}
-  h3 {{ font-size: 8pt; text-align: center; margin: 0 0 8px; font-weight: normal; color: #444; }}
-  table {{ width: 100%; border-collapse: collapse; margin-bottom: 10pt; }}
-  .hdr-cuenta td {{ background-color: #1B2B4E; color: #F4B41A; font-weight: bold;
-                    font-size: 8pt; padding: 4px 6px;
-                    border-top: 1pt solid #C5A028; border-bottom: 1pt solid #C5A028; }}
-  th {{ background-color: #243B67; color: white; font-size: 7pt; padding: 3px 4px;
-        border: 0.5pt solid #000; text-align: center; }}
-  td {{ border: 0.5pt solid #94a3b8; padding: 2px 4px; vertical-align: middle; }}
-  .col-fecha   {{ width: 55pt; text-align: center; }}
-  .col-partida {{ width: 40pt; text-align: center; }}
+  .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 4pt; border: none; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .enc-izq {{ text-align: center; vertical-align: middle; width: 85%; padding: 0; }}
+  .enc-der {{ text-align: right; vertical-align: top; padding: 0; font-size: 8.5pt; color: #333; white-space: nowrap; width: 15%; }}
+  .enc-titulo  {{ font-size: 13pt; font-weight: bold; margin: 0; text-align: center; }}
+  .enc-empresa {{ font-size: 10pt; font-weight: bold; margin: 1pt 0 0 0; text-align: center; }}
+  .enc-fechas  {{ font-size: 8.5pt; color: #333; margin: 1pt 0 0 0; text-align: center; }}
+  .enc-moneda  {{ font-size: 8pt; color: #555; margin: 1pt 0 0 0; text-align: center; }}
+  table {{ width: 100%; border-collapse: collapse; margin-bottom: 8pt; }}
+  th {{ background-color: #EEF2F7; color: #0A1628; font-size: 8pt; padding: 2px 4px;
+        border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8;
+        text-align: center; font-weight: bold; }}
+  td {{ border-left: 0.5pt solid #94a3b8; border-right: 0.5pt solid #94a3b8;
+        border-top: none; border-bottom: none;
+        padding: 1px 4px; vertical-align: middle; font-size: 8pt; }}
+  .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
+  .hdr-cuenta td {{ background-color: #D1D5DB; color: #0A1628; font-weight: bold;
+                    font-size: 8.5pt; padding: 3px 6px;
+                    border: 0.5pt solid #94a3b8; border-bottom: 1pt solid #94a3b8; }}
+  .col-mes     {{ width: 42pt; text-align: left; }}
+  .col-dia     {{ width: 18pt; text-align: center; }}
+  .col-partida {{ width: 38pt; text-align: center; }}
   .col-desc    {{ text-align: left; }}
-  .col-monto   {{ width: 60pt; text-align: right; }}
-  .col-saldo   {{ width: 65pt; text-align: right; font-weight: bold; }}
-  .row-ant td  {{ background-color: #F1F5F9; font-style: italic; color: #475569; }}
+  .col-monto   {{ width: 62pt; text-align: right; }}
+  .col-saldo   {{ width: 68pt; text-align: right; font-weight: bold; }}
+  .row-ant td  {{ background-color: #EEF2F7; font-style: italic; color: #475569; }}
   .row-alt td  {{ background-color: #FAFAFA; }}
-  .row-total td {{ background-color: #E5E7EB; font-weight: bold;
-                   border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
+  .row-total td {{ background-color: #EEF2F7; font-weight: bold;
+                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
+  .row-total .col-saldo {{ color: #065f46; }}
 </style></head><body>
 """
 
@@ -3360,11 +3369,17 @@ def libro_mayor_pdf(request):
             html += '<div class="page-break"></div>'
 
         html += f"""
-<h1>LIBRO MAYOR</h1>
-<h2>{nombre_empresa}</h2>
-<h3>Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash;
-Periodo: {periodo.nombre} &mdash; (Expresado en Quetzales) &mdash;
-Pagina {pagina['numero']} de {len(paginas)}</h3>
+<table class="enc-tabla">
+  <tr>
+    <td class="enc-izq">
+      <div class="enc-titulo">LIBRO MAYOR</div>
+      <div class="enc-empresa">{nombre_empresa}</div>
+      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}</div>
+      <div class="enc-moneda">(Expresado en Quetzales)</div>
+    </td>
+    <td class="enc-der">Folio No. {pagina['numero']}</td>
+  </tr>
+</table>
 """
         for bloque in pagina['bloques']:
             cuenta = bloque['cuenta']
@@ -3374,11 +3389,12 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
                 f"<strong>{cuenta.nombre}</strong>"
             )
             html += f"""<table>
-<tr class="hdr-cuenta"><td colspan="6">{nombre_cuenta}</td></tr>
+<tr class="hdr-cuenta"><td colspan="7"><strong>{cuenta.nombre}</strong></td></tr>
 <tr>
-  <th class="col-fecha">FECHA</th>
+  <th class="col-mes">MES</th>
+  <th class="col-dia">DÍA</th>
   <th class="col-partida">PARTIDA</th>
-  <th class="col-desc">DESCRIPCION</th>
+  <th class="col-desc">NOMBRE</th>
   <th class="col-monto">DEBE</th>
   <th class="col-monto">HABER</th>
   <th class="col-saldo">SALDO</th>
@@ -3386,7 +3402,7 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
 """
             if bloque['saldo_anterior'] != Decimal('0'):
                 html += f"""<tr class="row-ant">
-  <td class="col-fecha"></td><td class="col-partida"></td>
+  <td class="col-mes"></td><td class="col-dia"></td><td class="col-partida"></td>
   <td class="col-desc">Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}</td>
   <td class="col-monto"></td><td class="col-monto"></td>
   <td class="col-saldo">{bloque['saldo_anterior']:,.2f}</td>
@@ -3397,7 +3413,8 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
                 debe  = f"{fila['debe']:,.2f}"  if fila['debe']  > 0 else ''
                 haber = f"{fila['haber']:,.2f}" if fila['haber'] > 0 else ''
                 html += f"""<tr class="{cls}">
-  <td class="col-fecha">{fila['texto_fecha']}</td>
+  <td class="col-mes">{fila['texto_mes']}</td>
+  <td class="col-dia">{fila['texto_dia']}</td>
   <td class="col-partida">{fila['correlativo']}</td>
   <td class="col-desc">{fila['descripcion']}</td>
   <td class="col-monto">{debe}</td>
@@ -3406,7 +3423,7 @@ Pagina {pagina['numero']} de {len(paginas)}</h3>
 </tr>"""
 
             html += f"""<tr class="row-total">
-  <td class="col-fecha"></td><td class="col-partida"></td>
+  <td class="col-mes"></td><td class="col-dia"></td><td class="col-partida"></td>
   <td class="col-desc" style="text-align:right;">TOTALES</td>
   <td class="col-monto">{bloque['total_debe']:,.2f}</td>
   <td class="col-monto">{bloque['total_haber']:,.2f}</td>

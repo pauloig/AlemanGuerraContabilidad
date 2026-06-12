@@ -34,65 +34,45 @@
     .balance-wrapper {
         background: white; border-radius: 12px; padding: 25px;
         box-shadow: 0 4px 15px rgba(0,0,0,0.05); overflow-x: auto;
+        margin-bottom: 20px;
     }
     .balance-table {
         width: 100%; border-collapse: collapse;
-        font-family: 'Courier New', monospace; font-size: 11px;
+        font-family: Arial, Helvetica, sans-serif; font-size: 12px;
         table-layout: fixed;
     }
-    .balance-table th, .balance-table td {
-        border: 1px solid #000; padding: 4px 7px; vertical-align: middle;
+    .balance-table td {
+        border-left:  1px solid #94a3b8;
+        border-right: 1px solid #94a3b8;
+        border-top:   none; border-bottom: none;
+        padding: 3px 7px; vertical-align: middle;
     }
     .balance-table th {
-        background: #1B2B4E; color: white;
-        font-size: 10px; text-align: center; font-weight: bold;
+        background: #EEF2F7; color: #0A1628;
+        font-size: 11px; text-align: center; font-weight: bold;
+        border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
+        padding: 4px 7px;
     }
-    .col-cuenta  { text-align: left; }
-    .col-monto   { width: 115px; text-align: right; font-family: monospace; }
-    .col-nat     { width: 35px;  text-align: center; font-weight: bold; }
+    .col-cuenta { text-align: left; }
+    .col-monto  { width: 130px; text-align: right; font-family: monospace; }
 
-    /* Encabezado de área */
-    tr.area-header td {
-        background: #243B67; color: #F4B41A;
-        font-weight: bold; font-size: 11px; letter-spacing: 1px;
-        border-top: 2px solid #C5A028; border-bottom: 1px solid #C5A028;
-        padding: 5px 8px;
+    tr.mes-header td {
+        background: #d1d5db; color: #0A1628;
+        font-weight: bold; font-size: 12px; text-align: center;
+        border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
+        padding: 5px 8px; letter-spacing: 1px;
     }
-    /* Filas alternas */
-    tr.cuenta-row:nth-child(even) td { background: #f9fafb; }
-    /* Saldo deudor */
-    td.saldo-deudor   { color: #1e40af; font-weight: 700; }
-    /* Saldo acreedor */
-    td.saldo-acreedor { color: #065f46; font-weight: 700; }
-    /* Naturaleza */
-    td.nat-d { color: #1e40af; font-weight: 700; }
-    td.nat-a { color: #065f46; font-weight: 700; }
-
-    /* Subtotales de área */
-    tr.subtotal-row td {
-        background: #e5e7eb; font-weight: bold;
-        border-top: 1.5px solid #000; border-bottom: 1px solid #000;
-        font-size: 10px;
+    tr.cuenta-row:nth-child(even) td { background: #fafafa; }
+    tr.sumas-row td {
+        background: #EEF2F7; font-weight: bold;
+        border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
     }
-    /* Totales generales */
-    tr.total-row td {
-        background: #1B2B4E; color: white; font-weight: bold;
-        border-top: 2px solid #C5A028; font-size: 11px;
-    }
-    /* Badge cuadrado */
-    .badge-cuadrado {
-        display: inline-block; padding: 4px 12px; border-radius: 20px;
-        font-size: 12px; font-weight: 700; margin-left: 12px;
-    }
-    .badge-ok  { background: #d1fae5; color: #065f46; }
-    .badge-err { background: #fee2e2; color: #991b1b; }
 
     .info-box {
         background: #f8fafc; border-left: 4px solid #C5A028;
         padding: 12px 15px; margin-bottom: 20px; border-radius: 8px; font-size: 13px;
     }
     .empty-state { text-align: center; padding: 60px 20px; }
-
     .btn-ir-filtros {
         position: fixed; bottom: 30px; right: 30px;
         background: linear-gradient(135deg, #C5A028 0%, #F4B41A 100%);
@@ -102,10 +82,7 @@
         display: flex; align-items: center; justify-content: center;
         text-decoration: none; transition: all 0.3s; z-index: 100;
     }
-    .btn-ir-filtros:hover {
-        transform: translateY(-3px);
-        box-shadow: 0 6px 18px rgba(197,160,40,0.4); color: #0A1628;
-    }
+    .btn-ir-filtros:hover { transform: translateY(-3px); color: #0A1628; }
     .spinner-overlay {
         display: none; position: fixed; inset: 0;
         background: rgba(10,22,40,0.55); z-index: 9999;
@@ -119,14 +96,6 @@
     }
     .spinner-texto { color: white; font-size: 14px; font-weight: 600; }
     @keyframes girar { to { transform: rotate(360deg); } }
-
-    @media print {
-        .no-print { display: none !important; }
-        .balance-wrapper { box-shadow: none; padding: 10px 0; }
-        .balance-table th, tr.area-header td, tr.subtotal-row td, tr.total-row td {
-            -webkit-print-color-adjust: exact; print-color-adjust: exact;
-        }
-    }
 </style>
 
 <div class="form-container">
@@ -137,7 +106,7 @@
                 <div class="col-md-3">
                     <div class="filter-group">
                         <label><i class="fas fa-building"></i> Empresa</label>
-                        <input type="text" class="filter-control" value="{{ empresa.nombre_comercial|default:empresa.razon_social }}" disabled>
+                        <input type="text" class="filter-control" value="{{ empresa.razon_social|default:empresa.nombre_comercial }}" disabled>
                     </div>
                 </div>
                 <div class="col-md-3">
@@ -194,86 +163,56 @@
     <div class="info-box no-print">
         <i class="fas fa-info-circle"></i>
         Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} &nbsp;|&nbsp;
-        {{ total_cuentas }} cuenta(s)
-        {% if totales.cuadrado %}
-        <span class="badge-cuadrado badge-ok"><i class="fas fa-check-circle"></i> Cuadrado</span>
-        {% else %}
-        <span class="badge-cuadrado badge-err"><i class="fas fa-exclamation-triangle"></i> No cuadra</span>
-        {% endif %}
+        {{ cuadros|length }} mes(es)
     </div>
 
     <div class="balance-wrapper">
-        <div style="text-align:center;margin-bottom:16px;">
-            <strong style="font-family:monospace;font-size:14px;color:#0A1628;">BALANCE DE SALDOS</strong><br>
-            <span style="font-family:monospace;font-size:11px;">
-                {{ empresa.nombre_comercial|default:empresa.razon_social }}
-            </span><br>
-            <span style="font-family:monospace;font-size:10px;color:#475569;">
-                Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
-                &nbsp;&mdash;&nbsp; (Expresado en Quetzales)
-            </span>
+
+        <!-- Encabezado -->
+        <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+            <div style="flex:1;text-align:center;">
+                <strong style="font-family:Arial,sans-serif;font-size:15px;color:#0A1628;display:block;margin-bottom:2px;">BALANCE DE SALDOS</strong>
+                <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;display:block;margin-bottom:2px;">
+                    {{ empresa.razon_social|default:empresa.nombre_comercial }}
+                </span>
+                <span style="font-family:Arial,sans-serif;font-size:10px;color:#333;display:block;margin-bottom:1px;">
+                    Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
+                </span>
+                <span style="font-family:Arial,sans-serif;font-size:9px;color:#555;display:block;">
+                    (Expresado en Quetzales)
+                </span>
+            </div>
         </div>
 
-        <table class="balance-table">
+        {% for cuadro in cuadros %}
+        <table class="balance-table" style="margin-bottom:20px;">
             <thead>
+                <tr class="mes-header">
+                    <td colspan="3">{{ cuadro.mes }}</td>
+                </tr>
                 <tr>
-                    <th class="col-cuenta">NOMBRE DE LA CUENTA</th>
-                    <th class="col-monto">DEBE</th>
-                    <th class="col-monto">HABER</th>
-                    <th class="col-monto">SALDO DEUDOR</th>
-                    <th class="col-monto">SALDO ACREEDOR</th>
-                    <th class="col-nat">N</th>
+                    <th class="col-cuenta">Nombre de la Cuenta</th>
+                    <th class="col-monto">Debe</th>
+                    <th class="col-monto">Haber</th>
                 </tr>
             </thead>
             <tbody>
-                {% for grupo in grupos %}
-                <tr class="area-header">
-                    <td colspan="6">{{ grupo.area.nombre|upper }}</td>
-                </tr>
-
-                {% for c in grupo.cuentas %}
+                {% for c in cuadro.cuentas %}
                 <tr class="cuenta-row">
-                    <td class="col-cuenta">{{ c.cuenta.nombre }}</td>
-                    <td class="col-monto">{{ c.debe_total|monto }}</td>
-                    <td class="col-monto">{{ c.haber_total|monto }}</td>
-                    <td class="col-monto {% if c.naturaleza == 'D' %}saldo-deudor{% endif %}">
-                        {% if c.naturaleza == 'D' %}{{ c.saldo|monto }}{% endif %}
-                    </td>
-                    <td class="col-monto {% if c.naturaleza == 'A' %}saldo-acreedor{% endif %}">
-                        {% if c.naturaleza == 'A' %}{{ c.saldo|monto }}{% endif %}
-                    </td>
-                    <td class="col-nat {% if c.naturaleza == 'D' %}nat-d{% else %}nat-a{% endif %}">
-                        {{ c.naturaleza }}
-                    </td>
+                    <td class="col-cuenta">{{ c.nombre }}</td>
+                    <td class="col-monto">{% if c.debe > 0 %}{{ c.debe|monto }}{% endif %}</td>
+                    <td class="col-monto">{% if c.haber > 0 %}{{ c.haber|monto }}{% endif %}</td>
                 </tr>
                 {% endfor %}
-
-                <tr class="subtotal-row">
-                    <td class="col-cuenta" style="text-align:right;">Subtotal {{ grupo.area.nombre }}</td>
-                    <td class="col-monto">{{ grupo.subtotal_debe|monto }}</td>
-                    <td class="col-monto">{{ grupo.subtotal_haber|monto }}</td>
-                    <td class="col-monto">{{ grupo.subtotal_saldo_deudor|monto }}</td>
-                    <td class="col-monto">{{ grupo.subtotal_saldo_acreedor|monto }}</td>
-                    <td class="col-nat"></td>
-                </tr>
-                {% endfor %}
-
-                <tr class="total-row">
-                    <td class="col-cuenta" style="text-align:right;">TOTALES GENERALES</td>
-                    <td class="col-monto">{{ totales.total_debe|monto }}</td>
-                    <td class="col-monto">{{ totales.total_haber|monto }}</td>
-                    <td class="col-monto">{{ totales.total_saldo_deudor|monto }}</td>
-                    <td class="col-monto">{{ totales.total_saldo_acreedor|monto }}</td>
-                    <td class="col-nat">
-                        {% if totales.cuadrado %}
-                        <i class="fas fa-check" style="color:#4ade80;"></i>
-                        {% else %}
-                        <i class="fas fa-times" style="color:#f87171;"></i>
-                        {% endif %}
-                    </td>
+                <tr class="sumas-row">
+                    <td class="col-cuenta" style="text-align:right;">Sumas Iguales</td>
+                    <td class="col-monto">{{ cuadro.total_debe|monto }}</td>
+                    <td class="col-monto">{{ cuadro.total_haber|monto }}</td>
                 </tr>
             </tbody>
         </table>
+        {% endfor %}
+
     </div>
     {% endif %}
 </div>
@@ -302,4 +241,5 @@ document.addEventListener('visibilitychange', function() {
     if (!document.hidden) document.getElementById('spinnerOverlay').classList.remove('activo');
 });
 </script>
+
 {% endblock %}

@@ -1,7 +1,7 @@
 from decimal import Decimal
 from django.db.models import Sum, Q
 
-from administracion.services.libro_diario_service import formato_fecha, nombre_mes
+from administracion.services.libro_diario_service import formato_fecha, nombre_mes, MESES
 
 # Áreas contables cuyo saldo "natural" es deudor (aumenta con Debe)
 # Activo (1) y Perdidas/Gastos (5)
@@ -74,8 +74,12 @@ class LibroMayorService:
         cuentas = (
             Cuenta.objects
             .filter(id__in=cuentas_ids)
-            .select_related('id_subgrupo', 'id_area_contable')
-            .order_by('id_area_contable__nombre', 'id_subgrupo__nombre', 'nombre')
+            .select_related('id_subgrupo', 'id_subgrupo__id_grupo', 'id_area_contable')
+            .order_by(
+                'id_area_contable__orden',
+                'id_subgrupo__orden',
+                'orden',
+            )
         )
 
         bloques = []
@@ -126,14 +130,28 @@ class LibroMayorService:
 
                 saldo = calcular_saldo(saldo_acum_debe, saldo_acum_haber, tipo)
 
+                # Descripción: nombre de la cuenta contraparte
+                # Si solo hay 2 movimientos, mostrar el nombre de la cuenta contraria
+                # Si hay más, mostrar "Varios"
+                movs_asiento = list(
+                    Movimiento.objects.filter(id_asiento=asiento)
+                    .select_related('id_cuenta')
+                    .exclude(id=mov.id)
+                )
+                if len(movs_asiento) == 1:
+                    descripcion = movs_asiento[0].id_cuenta.nombre
+                else:
+                    descripcion = 'Varios'
+
                 filas.append({
-                    'fecha':       asiento.fecha,
-                    'texto_fecha': formato_fecha(asiento.fecha),
-                    'correlativo': asiento.correlativo,
-                    'descripcion': asiento.comentario,
-                    'debe':        debe,
-                    'haber':       haber,
-                    'saldo':       saldo,
+                    'fecha':        asiento.fecha,
+                    'texto_mes':    MESES[asiento.fecha.month],
+                    'texto_dia':    str(asiento.fecha.day),
+                    'correlativo':  asiento.correlativo,
+                    'descripcion':  descripcion,
+                    'debe':         debe,
+                    'haber':        haber,
+                    'saldo':        saldo,
                 })
 
             saldo_final = calcular_saldo(
