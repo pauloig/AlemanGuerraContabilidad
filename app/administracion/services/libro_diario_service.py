@@ -98,80 +98,109 @@ class LibroDiarioService:
 
     @staticmethod
     def paginar_con_van_vienen(bloques, lineas_por_pagina=None):
-        """
-        Paginación sin restricción de integridad de partida:
-        - Las partidas PUEDEN cortarse entre páginas.
-        - Cada página SIEMPRE tiene VIENEN al inicio (si no es primera) y VAN al final.
-        - Fila de fecha no queda sola al final de página (min 2 líneas después).
-        - Separador de mes no queda solo al final.
-        """
         if lineas_por_pagina is None:
             lineas_por_pagina = LibroDiarioService.LINEAS_POR_PAGINA
 
-        # Aplanar todos los bloques en una lista lineal de filas
+        # Aplanar bloques en lista lineal
         filas_planas = []
         for bloque in bloques:
-            if bloque['tipo'] == 'separador_mes':
+            if bloque['tipo'] in ('separador_mes', 'fecha'):
                 filas_planas.append({
-                    'tipo':  'separador_mes',
-                    'texto': bloque['texto'],
-                    'debe':  Decimal('0'),
-                    'haber': Decimal('0'),
-                    'correlativo': None,
-                    'cuenta_nombre': '',
-                })
-            elif bloque['tipo'] == 'fecha':
-                filas_planas.append({
-                    'tipo':  'fecha',
-                    'texto': bloque['texto'],
-                    'debe':  Decimal('0'),
-                    'haber': Decimal('0'),
-                    'correlativo': None,
+                    'tipo':          bloque['tipo'],
+                    'texto':         bloque['texto'],
+                    'debe':          Decimal('0'),
+                    'haber':         Decimal('0'),
+                    'correlativo':   None,
                     'cuenta_nombre': '',
                 })
             elif bloque['tipo'] == 'asiento':
                 primer = True
                 for fila in bloque['filas']:
                     filas_planas.append({
-                        'tipo':          fila['tipo'],
-                        'cuenta_nombre': fila['cuenta_nombre'],
-                        'debe':          fila['debe'],
-                        'haber':         fila['haber'],
-                        'correlativo':   bloque['correlativo'] if primer else None,
-                        'texto':         '',
-                        '_asiento_debe':  bloque['total_debe'],
-                        '_asiento_haber': bloque['total_haber'],
+                        'tipo':                  fila['tipo'],
+                        'cuenta_nombre':         fila['cuenta_nombre'],
+                        'debe':                  fila['debe'],
+                        'haber':                 fila['haber'],
+                        'correlativo':           bloque['correlativo'] if primer else None,
+                        'texto':                 '',
+                        '_asiento_debe':         bloque['total_debe'],
+                        '_asiento_haber':        bloque['total_haber'],
                         '_es_ultima_de_asiento': fila['tipo'] == 'espacio',
                     })
                     primer = False
 
-        # Ahora paginar la lista plana línea a línea
-        paginas         = []
-        pagina_actual   = []
-        lineas_usadas   = 0
-        acumulado_debe  = Decimal('0')
-        acumulado_haber = Decimal('0')
-        debe_pagina     = Decimal('0')
-        haber_pagina    = Decimal('0')
+        paginas       = []
+        pagina_actual = []
+        lineas_usadas = 0
+        # acumula solo partidas COMPLETAS a lo largo de todas las páginas
+        acum_debe     = Decimal('0')
+        acum_haber    = Decimal('0')
+        # acumula partidas completas dentro de la página actual
+        debe_pagina   = Decimal('0')
+        haber_pagina  = Decimal('0')
+        # van de la página anterior (para el VIENEN de la siguiente)
+        van_debe_prev  = Decimal('0')
+        van_haber_prev = Decimal('0')
+        corte_prev     = False
 
         def cerrar_pagina():
             nonlocal pagina_actual, lineas_usadas, debe_pagina, haber_pagina
-            nonlocal acumulado_debe, acumulado_haber
-            acumulado_debe  += debe_pagina
-            acumulado_haber += haber_pagina
+            nonlocal acum_debe, acum_haber
+            nonlocal van_debe_prev, van_haber_prev, corte_prev
+
+            # Detectar si la última partida está cortada
+            # Una partida está COMPLETA cuando su última fila visible es 'comentario'
+            # Solo hay corte real cuando termina en 'movimiento' o 'detalle'
+            van_debe  = Decimal('0')
+            van_haber = Decimal('0')
+            corte     = False
+
+            # Buscar la última fila significativa (ignorar espacio y separadores)
+            ultima_significativa = None
+            for fila in reversed(pagina_actual):
+                if fila['tipo'] in ('espacio', 'separador_mes', 'fecha'):
+                    continue
+                ultima_significativa = fila
+                break
+
+            if ultima_significativa and ultima_significativa['tipo'] in ('movimiento', 'detalle'):
+                # Hay corte real — sumar solo MOVIMIENTOS visibles (no detalles)
+                corte = True
+                for fila in reversed(pagina_actual):
+                    if fila['tipo'] in ('espacio', 'comentario'):
+                        break
+                    if fila['tipo'] == 'movimiento':
+                        van_debe  += fila['debe']
+                        van_haber += fila['haber']
+                    elif fila['tipo'] in ('separador_mes', 'fecha'):
+                        break
+
+            acum_debe  += debe_pagina
+            acum_haber += haber_pagina
+
             paginas.append({
-                'numero':          len(paginas) + 1,
-                'registros':       list(pagina_actual),
-                'acumulado_debe':  acumulado_debe,
-                'acumulado_haber': acumulado_haber,
-                'es_primera':      len(paginas) == 0,
-                'vienen_debe':     paginas[-1]['acumulado_debe']  if paginas else Decimal('0'),
-                'vienen_haber':    paginas[-1]['acumulado_haber'] if paginas else Decimal('0'),
+                'numero':               len(paginas) + 1,
+                'registros':            list(pagina_actual),
+                'es_primera':           len(paginas) == 0,
+                'es_ultima':            False,
+                'corte_partida':        corte,
+                'corte_partida_anterior': corte_prev,
+                # VAN = suma filas visibles de la partida cortada (solo si hay corte)
+                'van_debe':             van_debe,
+                'van_haber':            van_haber,
+                # VIENEN = VAN de la página anterior (solo si página anterior tuvo corte)
+                'vienen_debe':          van_debe_prev,
+                'vienen_haber':         van_haber_prev,
             })
-            pagina_actual = []
-            lineas_usadas = 0
-            debe_pagina   = Decimal('0')
-            haber_pagina  = Decimal('0')
+
+            # Actualizar estado para la siguiente página
+            van_debe_prev  = van_debe
+            van_haber_prev = van_haber
+            corte_prev     = corte
+            pagina_actual  = []
+            lineas_usadas  = 0
+            debe_pagina    = Decimal('0')
+            haber_pagina   = Decimal('0')
 
         n = len(filas_planas)
         i = 0
@@ -179,17 +208,14 @@ class LibroDiarioService:
             fila = filas_planas[i]
             tipo = fila['tipo']
 
-            # Acumular totales de partidas completas
+            # Acumular total de partidas completas al encontrar su fila espacio
             if fila.get('_es_ultima_de_asiento'):
-                debe_pagina  += fila.get('_asiento_debe',  Decimal('0'))
-                haber_pagina += fila.get('_asiento_haber', Decimal('0'))
+                debe_pagina  += fila['_asiento_debe']
+                haber_pagina += fila['_asiento_haber']
 
-            # ¿Cabe en la página actual?
-            # Regla extra: separador_mes y fecha no quedan solos
-            # (deben tener al menos 2 líneas después antes del final de página)
+            # Salto de página
             if tipo in ('separador_mes', 'fecha'):
-                lineas_restantes = lineas_por_pagina - lineas_usadas
-                if lineas_restantes <= 2 and lineas_usadas > 0:
+                if lineas_por_pagina - lineas_usadas <= 2 and lineas_usadas > 0:
                     cerrar_pagina()
             elif lineas_usadas >= lineas_por_pagina:
                 cerrar_pagina()
@@ -198,21 +224,23 @@ class LibroDiarioService:
             lineas_usadas += 1
             i += 1
 
+        # Última página
         if pagina_actual:
-            acumulado_debe  += debe_pagina
-            acumulado_haber += haber_pagina
+            acum_debe  += debe_pagina
+            acum_haber += haber_pagina
             paginas.append({
-                'numero':          len(paginas) + 1,
-                'registros':       list(pagina_actual),
-                'acumulado_debe':  acumulado_debe,
-                'acumulado_haber': acumulado_haber,
-                'es_primera':      len(paginas) == 0,
-                'vienen_debe':     paginas[-1]['acumulado_debe']  if paginas else Decimal('0'),
-                'vienen_haber':    paginas[-1]['acumulado_haber'] if paginas else Decimal('0'),
+                'numero':               len(paginas) + 1,
+                'registros':            list(pagina_actual),
+                'es_primera':           len(paginas) == 0,
+                'es_ultima':            True,
+                'corte_partida':        False,
+                'corte_partida_anterior': corte_prev,
+                'van_debe':             Decimal('0'),
+                'van_haber':            Decimal('0'),
+                'vienen_debe':          van_debe_prev,
+                'vienen_haber':         van_haber_prev,
             })
 
-        for p in paginas:
-            p['es_ultima'] = False
         if paginas:
             paginas[-1]['es_ultima'] = True
 

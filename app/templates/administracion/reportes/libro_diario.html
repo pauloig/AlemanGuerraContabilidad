@@ -348,22 +348,21 @@
         <div class="libro-diario-wrapper">
 
             <!-- Encabezado de página -->
-            <div style="position:relative;margin-bottom:14px;">
-                <div style="position:absolute;top:0;right:0;font-family:monospace;font-size:10px;color:#475569;">
-                    Página {{ pagina.numero }} de {{ paginas|length }}
-                </div>
-                <div style="text-align:center;">
+            <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
+                <div style="flex:1;text-align:center;">
                     <strong style="font-family:Arial,sans-serif;font-size:15px;color:#0A1628;display:block;margin-bottom:2px;">LIBRO DE DIARIO</strong>
                     <span style="font-family:Arial,sans-serif;font-size:12px;font-weight:600;display:block;margin-bottom:2px;">
-                        {{ empresa.nombre_comercial|default:empresa.razon_social }}
+                        {{ empresa.razon_social|default:empresa.nombre_comercial }}
                     </span>
                     <span style="font-family:Arial,sans-serif;font-size:10px;color:#333;display:block;margin-bottom:1px;">
                         Del {{ fecha_desde|date:"d/m/Y" }} al {{ fecha_hasta|date:"d/m/Y" }}
-                        &nbsp;&mdash;&nbsp; Período: {{ periodo.nombre }}
                     </span>
                     <span style="font-family:Arial,sans-serif;font-size:9px;color:#555;display:block;">
                         (Expresado en Quetzales)
                     </span>
+                </div>
+                <div style="font-family:Arial,sans-serif;font-size:11px;color:#475569;white-space:nowrap;padding-top:2px;">
+                    Folio No. {{ pagina.numero }}
                 </div>
             </div>
 
@@ -380,7 +379,7 @@
                 <tbody>
 
                     <!-- VIENEN -->
-                    {% if not pagina.es_primera %}
+                    {% if pagina.corte_partida_anterior %}
                     <tr class="vienen-row">
                         <td class="col-partida"></td>
                         <td class="col-cuenta">VIENEN</td>
@@ -439,13 +438,13 @@
                     {% endfor %}
 
                     <!-- VAN -->
-                    {% if not pagina.es_ultima %}
+                    {% if not pagina.es_ultima and pagina.corte_partida %}
                     <tr class="van-row">
                         <td class="col-partida"></td>
                         <td class="col-cuenta">VAN</td>
                         <td class="col-auxiliar"></td>
-                        <td class="col-debe">Q {{ pagina.acumulado_debe|monto }}</td>
-                        <td class="col-haber">Q {{ pagina.acumulado_haber|monto }}</td>
+                        <td class="col-debe">Q {{ pagina.van_debe|monto }}</td>
+                        <td class="col-haber">Q {{ pagina.van_haber|monto }}</td>
                     </tr>
                     {% endif %}
 

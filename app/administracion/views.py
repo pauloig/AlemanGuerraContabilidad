@@ -1878,7 +1878,7 @@ def libro_diario_excel(request):
         fila += 1
 
         # VIENEN
-        if not pagina['es_primera']:
+        if pagina['corte_partida_anterior']:
             celda(fila, 1, '', bordes=borde, relleno=fill_van)
             celda(fila, 2, 'VIENEN', fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde)
             celda(fila, 3, float(pagina['vienen_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
@@ -1926,11 +1926,11 @@ def libro_diario_excel(request):
                 fila += 1
 
         # VAN
-        if not pagina['es_ultima']:
+        if not pagina['es_ultima'] and pagina['corte_partida']:
             celda(fila, 1, '', bordes=borde, relleno=fill_van)
             celda(fila, 2, 'VAN', fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde)
-            celda(fila, 3, float(pagina['acumulado_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
-            celda(fila, 4, float(pagina['acumulado_haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            celda(fila, 3, float(pagina['van_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
+            celda(fila, 4, float(pagina['van_haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
             fila += 1
             # Salto de página Excel
             from openpyxl.worksheet.pagebreak import Break
@@ -1985,7 +1985,7 @@ def libro_diario_pdf(request):
     total_debe_general  = sum(b['total_debe']  for b in datos if b['tipo'] == 'asiento')
     total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
     html = f"""<!DOCTYPE html>
 <html>
@@ -2049,10 +2049,10 @@ def libro_diario_pdf(request):
     <td class="enc-izq">
       <div class="enc-titulo">LIBRO DE DIARIO</div>
       <div class="enc-empresa">{nombre_empresa}</div>
-      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} &mdash; Período: {periodo.nombre}</div>
+      <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}</div>
       <div class="enc-moneda">(Expresado en Quetzales)</div>
     </td>
-    <td class="enc-der">Página {pagina['numero']} de {len(paginas)}</td>
+    <td class="enc-der">Folio No. {pagina['numero']}</td>
   </tr>
 </table>
 <table>
@@ -2067,7 +2067,7 @@ def libro_diario_pdf(request):
 </thead>
 <tbody>
 """
-        if not pagina['es_primera']:
+        if not pagina['es_primera'] and paginas[i-1]['corte_partida']:
             html += f"""<tr class="row-vienen">
   <td class="col-partida"></td>
   <td class="col-cuenta" style="text-align:right;">VIENEN</td>
@@ -2119,13 +2119,13 @@ def libro_diario_pdf(request):
   <td class="col-monto">{reg['haber']:,.2f}</td>
 </tr>"""
 
-        if not pagina['es_ultima']:
+        if not pagina['es_ultima'] and pagina['corte_partida']:
             html += f"""<tr class="row-van">
   <td class="col-partida"></td>
   <td class="col-cuenta" style="text-align:right;">VAN</td>
   <td class="col-auxiliar"></td>
-  <td class="col-monto">{pagina['acumulado_debe']:,.2f}</td>
-  <td class="col-monto">{pagina['acumulado_haber']:,.2f}</td>
+  <td class="col-monto">{pagina['van_debe']:,.2f}</td>
+  <td class="col-monto">{pagina['van_haber']:,.2f}</td>
 </tr>"""
 
         html += '</tbody></table>'
