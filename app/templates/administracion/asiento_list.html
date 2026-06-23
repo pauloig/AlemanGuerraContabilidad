@@ -440,6 +440,9 @@
                             <a href="{% url 'asiento_edit' asiento.pk %}" class="btn-icon btn-edit" title="Editar">
                                 <i class="fas fa-edit"></i>
                             </a>
+                            <a href="{% url 'asiento_delete' asiento.pk %}" class="btn-icon btn-delete" title="Eliminar" onclick="return confirm('¿Eliminar este asiento?')">
+                                <i class="fas fa-trash-alt"></i>
+                            </a>
                         {% endif %}
                         
                     </div>

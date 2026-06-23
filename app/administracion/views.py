@@ -1382,9 +1382,9 @@ def asiento_delete(request, pk):
     """
     asiento = get_object_or_404(Asiento, pk=pk)
     
-    if asiento.estatus == 1:
+    """if asiento.estatus == 1:
         messages.error(request, 'No se puede eliminar un asiento finalizado')
-        return redirect('asiento_list')
+        return redirect('asiento_list')"""
     
     if request.method == 'POST':
         correlativo = asiento.correlativo
@@ -1409,8 +1409,8 @@ def movimiento_create(request):
     asiento_id = request.POST.get('asiento_id')
     asiento = get_object_or_404(Asiento, pk=asiento_id)
     
-    if asiento.estatus == 1:
-        return JsonResponse({'success': False, 'error': 'No se pueden agregar movimientos a un asiento finalizado'})
+    """if asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden agregar movimientos a un asiento finalizado'})"""
     
     form = MovimientoForm(request.POST)
     if form.is_valid():
@@ -1448,8 +1448,8 @@ def movimiento_delete(request):
     movimiento = get_object_or_404(Movimiento, pk=movimiento_id)
     asiento = movimiento.id_asiento
     
-    if asiento.estatus == 1:
-        return JsonResponse({'success': False, 'error': 'No se pueden eliminar movimientos de un asiento finalizado'})
+    """if asiento.estatus == 1:
+        return JsonResponse({'success': False, 'error': 'No se pueden eliminar movimientos de un asiento finalizado'})"""
     
     movimiento.delete()
     
