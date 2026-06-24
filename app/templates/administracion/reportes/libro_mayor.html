@@ -232,16 +232,30 @@
 
         {% for bloque in pagina.bloques %}
         <table class="mayor-table" style="margin-bottom:12px;">
+            <colgroup>
+                <col style="width:10%">
+                <col style="width:5%">
+                <col style="width:35%">
+                <col style="width:15%">
+                <col style="width:15%">
+                <col style="width:20%">
+            </colgroup>
             <thead>
-                <tr class="cuenta-header">
-                    <td colspan="7">
+                <span style="text-align: center; display: block;">
+                    <strong>{{ bloque.cuenta.nombre }}</strong>
+                </span>
+                <!--<tr class="cuenta-header">
+                    
+                    <td colspan="6">
                         <strong>{{ bloque.cuenta.nombre }}</strong>
                     </td>
-                </tr>
+                </tr>-->
                 <tr>
-                    <th class="col-mes">MES</th>
-                    <th class="col-dia">DÍA</th>
-                    <th class="col-partida">PARTIDA</th>
+                    <!--<th class="col-mes"></th>
+                    <th class="col-dia" ></th>
+                    <th class="col-partida">PARTIDA</th> -->
+                    <th></th>
+                    <th></th>
                     <th class="col-desc">NOMBRE</th>
                     <th class="col-monto">DEBE</th>
                     <th class="col-monto">HABER</th>
@@ -252,12 +266,12 @@
                 {% if bloque.saldo_anterior != 0 %}
                 <tr class="saldo-anterior-row">
                     <td class="col-mes"></td>
-                    <td class="col-dia"></td>
-                    <td class="col-partida"></td>
-                    <td class="col-desc">Saldo anterior al {{ fecha_desde|date:"d/m/Y" }}</td>
-                    <td class="col-monto"></td>
-                    <td class="col-monto"></td>
-                    <td class="col-saldo">{{ bloque.saldo_anterior|monto }}</td>
+                    <td class="col-dia" ></td>
+                    <!--<td class="col-partida"></td>-->
+                    <td class="col-desc" >Saldo anterior al {{ fecha_desde|date:"d/m/Y" }}</td>
+                    <td class="col-monto" ></td>
+                    <td class="col-monto" ></td>
+                    <td class="col-saldo" >{{ bloque.saldo_anterior|monto }}</td>
                 </tr>
                 {% endif %}
 
@@ -265,7 +279,7 @@
                 <tr class="movimiento-row">
                     <td class="col-mes">{{ fila.texto_mes }}</td>
                     <td class="col-dia">{{ fila.texto_dia }}</td>
-                    <td class="col-partida">{{ fila.correlativo }}</td>
+                    <!--<td class="col-partida">{{ fila.correlativo }}</td>-->
                     <td class="col-desc">{{ fila.descripcion }}</td>
                     <td class="col-monto">{% if fila.debe > 0 %}{{ fila.debe|monto }}{% endif %}</td>
                     <td class="col-monto">{% if fila.haber > 0 %}{{ fila.haber|monto }}{% endif %}</td>
@@ -276,7 +290,7 @@
                 <tr class="totales-cuenta">
                     <td class="col-mes"></td>
                     <td class="col-dia"></td>
-                    <td class="col-partida"></td>
+                    <!--<td class="col-partida"></td>-->
                     <td class="col-desc" style="text-align:right;">TOTALES</td>
                     <td class="col-monto">{{ bloque.total_debe|monto }}</td>
                     <td class="col-monto">{{ bloque.total_haber|monto }}</td>
