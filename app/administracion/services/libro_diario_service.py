@@ -24,29 +24,42 @@ class LibroDiarioService:
         bloques = []
         mes_actual   = None
         fecha_actual = None
+        
+        correlativo_nuevo = 0
 
-        for asiento in asientos.order_by('fecha', 'correlativo'):
+        #El order by original (fecha, correlativo) 
+        for asiento in asientos.order_by('fecha', 'id'):
             mes = nombre_mes(asiento.fecha)
 
             if mes != mes_actual:
+                # Reinicio Correlativo cada mes
+                correlativo_nuevo = 0
                 mes_actual   = mes
                 fecha_actual = None
                 bloques.append({'tipo': 'separador_mes', 'texto': mes})
+                
+                
+                
+                
+            correlativo_nuevo += 1
 
-            if asiento.fecha != fecha_actual:
-                fecha_actual = asiento.fecha
-                bloques.append({
-                    'tipo':  'fecha',
-                    'fecha': asiento.fecha,
-                    'texto': formato_fecha(asiento.fecha),
-                })
+            #if asiento.fecha != fecha_actual:
+            fecha_actual = asiento.fecha
+            bloques.append({
+                'tipo':  'fecha',
+                'fecha': asiento.fecha,
+                'texto': formato_fecha(asiento.fecha),
+            })
 
             movimientos = list(
                 asiento.movimientos.select_related('id_cuenta').prefetch_related('detalles')
             )
-            debe_movs  = [m for m in movimientos if m.tipo_movimiento == 1]
-            haber_movs = [m for m in movimientos if m.tipo_movimiento == 2]
+            #debe_movs  = [m for m in movimientos if m.tipo_movimiento == 1]
+            #haber_movs = [m for m in movimientos if m.tipo_movimiento == 2]
 
+            debe_movs = sorted((m for m in movimientos if m.tipo_movimiento == 1), key=lambda m: m.id)
+            haber_movs = sorted((m for m in movimientos if m.tipo_movimiento == 2), key=lambda m: m.id, reverse=True)
+            
             filas       = []
             total_debe  = Decimal('0')
             total_haber = Decimal('0')
@@ -68,7 +81,7 @@ class LibroDiarioService:
                 for det in mov.detalles.all():
                     filas.append({
                         'tipo':          'detalle',
-                        'cuenta_nombre': det.nombre,
+                        'cuenta_nombre': (det.nombre.strip() if det.nombre and det.nombre.strip() else (det.descripcion.strip() if det.descripcion and det.descripcion.strip() else '- sin descripcion -')),
                         'debe':  det.monto if es_debe else Decimal('0'),
                         'haber': det.monto if not es_debe else Decimal('0'),
                     })
@@ -86,9 +99,17 @@ class LibroDiarioService:
                 'haber': Decimal('0'),
             })
 
-            bloques.append({
+            """bloques.append({
                 'tipo':        'asiento',
                 'correlativo': asiento.correlativo,
+                'filas':       filas,
+                'total_debe':  total_debe,
+                'total_haber': total_haber,
+            })"""
+            
+            bloques.append({
+                'tipo':        'asiento',
+                'correlativo': correlativo_nuevo,
                 'filas':       filas,
                 'total_debe':  total_debe,
                 'total_haber': total_haber,

@@ -1187,13 +1187,15 @@
                         const div = document.createElement('div');
                         div.className = 'detail-item';
                         div.innerHTML = `
-                            <span><strong>${detalle.nombre}</strong>${detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${detalle.descripcion}</span>` : ''}</span>
+                            <span><strong>${detalle.nombre ||''}</strong>${detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;"> ${detalle.descripcion}</span>` : ''}</span>
                             <span>Q ${parseFloat(detalle.monto).toFixed(2)}</span>
                             <div style="display:flex;gap:4px;">
-                                <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${detalle.id},'${detalle.nombre.replace(/'/g,"\\'")}','${(detalle.descripcion||'').replace(/'/g,"\\'")}',${detalle.monto})" title="Editar">
+                                <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${detalle.id},'${(detalle.nombre||'').replace(/'/g,"\\'")}','${(detalle.descripcion||'').replace(/'/g,"\\'")}',${detalle.monto})" title="Editar">
                                     <i class="fas fa-edit"></i>
                                 </button>
-                                <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})" title="Eliminar">
+                                <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${detalle.id})" title="Eliminar"
+                                
+                                >
                                     <i class="fas fa-trash-alt"></i>
                                 </button>
                             </div>
@@ -1211,7 +1213,7 @@
         let nombre = document.getElementById('detalleProveedor').value;
         const otroInput = document.getElementById('detalleNombre');
         
-        if (nombre === '__otro__') {
+        /*if (nombre === '__otro__') {
             nombre = otroInput.value;
             if (!nombre) {
                 mostrarMensaje('Ingrese un nombre', 'warning');
@@ -1223,7 +1225,7 @@
                 mostrarMensaje('Seleccione un proveedor o ingrese un nombre', 'warning');
                 return;
             }
-        }
+        }*/
         
         const monto = parseFloat(document.getElementById('detalleMonto').value);
         if (!monto || monto <= 0) {
@@ -1255,7 +1257,7 @@
                     <span><strong>${data.detalle.nombre}</strong>${data.detalle.descripcion ? ` <span style="color:#64748b;font-size:12px;">— ${data.detalle.descripcion}</span>` : ''}</span>
                     <span>Q ${data.detalle.monto.toFixed(2)}</span>
                     <div style="display:flex;gap:4px;">
-                        <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${data.detalle.id},'${data.detalle.nombre.replace(/'/g,"\\'")}','${(data.detalle.descripcion||'').replace(/'/g,"\\'")}',${data.detalle.monto})" title="Editar">
+                        <button class="btn-icon-table btn-edit" onclick="abrirEditarDetalle(${data.detalle.id},'${(data.detalle.nombre||'').replace(/'/g,"\\'")}','${(data.detalle.descripcion||'').replace(/'/g,"\\'")}',${data.detalle.monto})" title="Editar">
                             <i class="fas fa-edit"></i>
                         </button>
                         <button class="btn-icon-table btn-delete-mov" onclick="eliminarDetalle(${data.detalle.id})" title="Eliminar">

@@ -767,6 +767,8 @@ class DetalleMovimiento(models.Model):
     """
     nombre = models.CharField(
         verbose_name="Nombre/Proveedor",
+        blank=True,
+        null=True,
         max_length=200
     )
     descripcion = models.CharField(
