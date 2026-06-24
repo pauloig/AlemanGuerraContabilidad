@@ -1861,7 +1861,7 @@ def libro_diario_excel(request):
         # Encabezado de página
         fila_merge(fila, 'LIBRO DIARIO', fnt_titulo, PatternFill(fill_type=None))
         fila += 1
-        nombre_emp = empresa.nombre_comercial or empresa.razon_social
+        nombre_emp = empresa.razon_social or empresa.nombre_comercial
         fila_merge(fila, nombre_emp, fnt_bold, PatternFill(fill_type=None))
         fila += 1
         fila_merge(fila,
