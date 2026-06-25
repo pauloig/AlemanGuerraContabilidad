@@ -2835,14 +2835,14 @@ def _get_balance_saldos_datos(request):
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None, None
+        return None, None, None, None, None, None
 
     fecha_desde = request.GET.get('fecha_desde')
     fecha_hasta = request.GET.get('fecha_hasta')
@@ -2857,13 +2857,18 @@ def _get_balance_saldos_datos(request):
     except ValueError:
         fecha_hasta = periodo.fecha_final
 
+    # Obtener datos sin paginar
     cuadros = BalanceSaldosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
-    return empresa, periodo, fecha_desde, fecha_hasta, cuadros
+    
+    # Paginar los datos
+    paginas = BalanceSaldosService.paginar(cuadros)
+    
+    return empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas
 
 
 @login_required
 def balance_saldos(request):
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -2876,7 +2881,12 @@ def balance_saldos(request):
             'periodo': periodo,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
+            'paginas': [],
+            'total_meses': 0,
         })
+
+    # Calcular total de páginas para mostrar en el template
+    total_paginas = len(paginas)
 
     return render(request, 'administracion/reportes/balance_saldos.html', {
         'sin_datos': False,
@@ -2884,7 +2894,9 @@ def balance_saldos(request):
         'periodo': periodo,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
-        'cuadros': cuadros,
+        'paginas': paginas,
+        'total_meses': len(cuadros),
+        'total_paginas': total_paginas,
         'fecha_reporte': timezone.now(),
     })
 
@@ -2893,9 +2905,7 @@ def balance_saldos(request):
 def balance_saldos_excel(request):
     from decimal import Decimal
 
-    empresa, periodo, fecha_desde, fecha_hasta, grupos, totales = _get_balance_saldos_datos(request)
-
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -2912,6 +2922,7 @@ def balance_saldos_excel(request):
     fnt_titulo = Font(bold=True, size=13)
     fnt_bold   = Font(bold=True, size=10)
     fnt_normal = Font(size=10)
+    fnt_italica = Font(size=9, italic=True)
     fnt_white  = Font(bold=True, size=10, color='FFFFFF')
 
     aln_center = Alignment(horizontal='center', vertical='center')
@@ -2922,9 +2933,14 @@ def balance_saldos_excel(request):
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'),  bottom=Side(style='thin')
     )
+    borde_superior = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='medium'), bottom=Side(style='thin')
+    )
 
     fill_header = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
     fill_mes    = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
+    fill_mes_cont = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
     fill_sumas  = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
     fill_alt    = PatternFill(start_color='FAFAFA', end_color='FAFAFA', fill_type='solid')
 
@@ -2938,53 +2954,84 @@ def balance_saldos_excel(request):
     def merge(r, val, fuente, relleno, altura=14):
         ws.merge_cells(start_row=r, start_column=1, end_row=r, end_column=3)
         cl = ws.cell(row=r, column=1, value=val)
-        cl.font = fuente; cl.alignment = aln_center; cl.fill = relleno
-        for c in range(1, 4): ws.cell(row=r, column=c).border = borde
+        cl.font = fuente
+        cl.alignment = aln_center
+        cl.fill = relleno
+        for c in range(1, 4):
+            ws.cell(row=r, column=c).border = borde
         ws.row_dimensions[r].height = altura
 
-    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None):
+    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None, borde_cell=None):
         cl = ws.cell(row=r, column=c, value=val)
-        if fuente:  cl.font      = fuente
+        if fuente:  cl.font = fuente
         if aln:     cl.alignment = aln
-        if relleno: cl.fill      = relleno
+        if relleno: cl.fill = relleno
         if fmt:     cl.number_format = fmt
-        cl.border = borde
+        if borde_cell:
+            cl.border = borde_cell
+        else:
+            cl.border = borde
         return cl
 
-    merge(fila, 'BALANCE DE SALDOS', fnt_titulo, PatternFill(fill_type=None), 18); fila += 1
-    merge(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None)); fila += 1
+    # Encabezado general
+    merge(fila, 'BALANCE DE SALDOS', fnt_titulo, PatternFill(fill_type=None), 18)
+    fila += 1
+    merge(fila, nombre_empresa, fnt_bold, PatternFill(fill_type=None))
+    fila += 1
     merge(fila,
         f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)",
         Font(size=9), PatternFill(fill_type=None), 12)
     fila += 2
 
-    for cuadro in cuadros:
-        # Encabezado mes
-        merge(fila, cuadro['mes'], fnt_bold, fill_mes, 13); fila += 1
-
-        # Encabezados columna
-        cel(fila, 1, 'Nombre de la Cuenta', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
-        cel(fila, 2, 'Debe',  fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
-        cel(fila, 3, 'Haber', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
-        ws.row_dimensions[fila].height = 14; fila += 1
-
-        for i, c in enumerate(cuadro['cuentas']):
-            rf = fill_alt if i % 2 == 1 else None
-            cel(fila, 1, c['nombre'],             fuente=fnt_normal, aln=aln_left,  relleno=rf)
-            cel(fila, 2, float(c['debe'])  if c['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 3, float(c['haber']) if c['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+    # Procesar cada página
+    for pagina in paginas:
+        # Número de página (solo si hay más de una página)
+        if len(paginas) > 1:
+            merge(fila, f"Página {pagina['numero']} de {len(paginas)}",
+                  Font(size=9, italic=True), PatternFill(fill_type=None), 11)
             fila += 1
 
-        # Sumas iguales
-        cel(fila, 1, 'Sumas Iguales', fuente=fnt_bold, aln=aln_right,  relleno=fill_sumas)
-        cel(fila, 2, float(cuadro['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00')
-        cel(fila, 3, float(cuadro['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00')
-        fila += 2
+        # Procesar cada parte del mes en la página
+        for parte in pagina['partes']:
+            # Encabezado del mes
+            if parte['es_inicio_mes']:
+                merge(fila, parte['mes'], fnt_bold, fill_mes, 13)
+            else:
+                merge(fila, f"{parte['mes']} (continuación)", fnt_bold, fill_mes_cont, 13)
+            fila += 1
 
-    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+            # Encabezados columna
+            cel(fila, 1, 'Nombre de la Cuenta', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+            cel(fila, 2, 'Debe', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+            cel(fila, 3, 'Haber', fuente=Font(bold=True, size=10), aln=aln_center, relleno=fill_header)
+            ws.row_dimensions[fila].height = 14
+            fila += 1
+
+            # Cuentas
+            for i, c in enumerate(parte['cuentas']):
+                rf = fill_alt if i % 2 == 1 else None
+                cel(fila, 1, c['nombre'], fuente=fnt_normal, aln=aln_left, relleno=rf)
+                cel(fila, 2, float(c['debe']) if c['debe'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                cel(fila, 3, float(c['haber']) if c['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                fila += 1
+
+            # Sumas iguales (solo si es el fin del mes)
+            if parte['mostrar_totales']:
+                cel(fila, 1, 'Sumas Iguales', fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, borde_cell=borde_superior)
+                cel(fila, 2, float(parte['total_debe']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00', borde_cell=borde_superior)
+                cel(fila, 3, float(parte['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00', borde_cell=borde_superior)
+                fila += 2
+
+        # Salto de página entre páginas (excepto última)
+        if not pagina['es_ultima']:
+            from openpyxl.worksheet.pagebreak import Break
+            ws.row_breaks.append(Break(id=fila))
+            fila += 1
+
+    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
     ws.page_setup.orientation = 'portrait'
-    ws.page_setup.fitToPage   = True
-    ws.page_setup.fitToWidth  = 1
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
 
     nombre = f"BalanceSaldos_{nombre_empresa.replace(' ','_')}_{fecha_desde.strftime('%Y%m%d')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -3003,7 +3050,7 @@ def balance_saldos_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado.')
         return redirect('balance_saldos')
 
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -3014,15 +3061,18 @@ def balance_saldos_pdf(request):
         return redirect('balance_saldos')
 
     nombre_empresa = empresa.razon_social or empresa.nombre_comercial
+    total_paginas = len(paginas)
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
   @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
   body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; }}
+  .page-break {{ page-break-before: always; }}
   .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 4pt; border: none; }}
   .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
-  .enc-izq {{ text-align: center; vertical-align: middle; width: 100%; padding: 0; }}
+  .enc-izq {{ text-align: center; vertical-align: middle; width: 85%; padding: 0; }}
+  .enc-der {{ text-align: right; vertical-align: top; padding: 0; font-size: 8.5pt; color: #333; white-space: nowrap; width: 15%; }}
   .enc-titulo  {{ font-size: 13pt; font-weight: bold; text-align: center; }}
   .enc-empresa {{ font-size: 10pt; font-weight: bold; text-align: center; }}
   .enc-fechas  {{ font-size: 8.5pt; color: #333; text-align: center; }}
@@ -3041,10 +3091,22 @@ def balance_saldos_pdf(request):
   .row-mes td {{ background-color: #D1D5DB; color: #0A1628; font-weight: bold;
                  text-align: center; border: 0.5pt solid #94a3b8;
                  border-bottom: 1pt solid #94a3b8; padding: 2px 5px; }}
+  .row-mes-cont td {{ background-color: #E5E7EB; color: #0A1628; font-weight: bold;
+                      text-align: center; border: 0.5pt solid #94a3b8;
+                      border-bottom: 1pt solid #94a3b8; padding: 2px 5px; font-style: italic; }}
   .row-alt td  {{ background-color: #FAFAFA; }}
   .row-sumas td {{ background-color: #EEF2F7; font-weight: bold;
                    border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
+  .sin-totales {{ margin-bottom: 0px !important; }}
+  .con-totales {{ margin-bottom: 10pt !important; }}
 </style></head><body>
+"""
+
+    for i, pagina in enumerate(paginas):
+        if i > 0:
+            html += '<div class="page-break"></div>'
+
+        html += f"""
 <table class="enc-tabla">
   <tr>
     <td class="enc-izq">
@@ -3053,34 +3115,47 @@ def balance_saldos_pdf(request):
       <div class="enc-fechas">Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')}</div>
       <div class="enc-moneda">(Expresado en Quetzales)</div>
     </td>
+    <td class="enc-der">
+      {f"Folio No. {pagina['numero']}" if total_paginas > 1 else ""}
+    </td>
   </tr>
 </table>
 """
 
-    for cuadro in cuadros:
-        html += f"""<table>
-<tr class="row-mes"><td colspan="3">{cuadro['mes']}</td></tr>
+        for parte in pagina['partes']:
+            # Determinar clase CSS para el encabezado del mes
+            cls_mes = 'row-mes' if parte['es_inicio_mes'] else 'row-mes-cont'
+            texto_mes = parte['mes'] if parte['es_inicio_mes'] else f"{parte['mes']} (continuación)"
+            
+            # Determinar si mostrar totales
+            cls_tabla = 'con-totales' if parte['mostrar_totales'] else 'sin-totales'
+            
+            html += f"""<table class="{cls_tabla}">
+<tr class="{cls_mes}"><td colspan="3">{texto_mes}</td></tr>
 <tr>
   <th class="col-cuenta">Nombre de la Cuenta</th>
   <th class="col-monto">Debe</th>
   <th class="col-monto">Haber</th>
 </tr>
 """
-        for j, c in enumerate(cuadro['cuentas']):
-            cls  = 'row-alt' if j % 2 == 1 else ''
-            debe  = f"{c['debe']:,.2f}"  if c['debe']  > 0 else ''
-            haber = f"{c['haber']:,.2f}" if c['haber'] > 0 else ''
-            html += f"""<tr class="{cls}">
+            for j, c in enumerate(parte['cuentas']):
+                cls = 'row-alt' if j % 2 == 1 else ''
+                debe = f"{c['debe']:,.2f}" if c['debe'] > 0 else ''
+                haber = f"{c['haber']:,.2f}" if c['haber'] > 0 else ''
+                html += f"""<tr class="{cls}">
   <td class="col-cuenta">{c['nombre']}</td>
   <td class="col-monto">{debe}</td>
   <td class="col-monto">{haber}</td>
 </tr>"""
 
-        html += f"""<tr class="row-sumas">
+            if parte['mostrar_totales']:
+                html += f"""<tr class="row-sumas">
   <td class="col-cuenta" style="text-align:right;">Sumas Iguales</td>
-  <td class="col-monto">{cuadro['total_debe']:,.2f}</td>
-  <td class="col-monto">{cuadro['total_haber']:,.2f}</td>
-</tr></table>"""
+  <td class="col-monto">{parte['total_debe']:,.2f}</td>
+  <td class="col-monto">{parte['total_haber']:,.2f}</td>
+</tr>"""
+
+            html += "</table>"
 
     html += '</body></html>'
 

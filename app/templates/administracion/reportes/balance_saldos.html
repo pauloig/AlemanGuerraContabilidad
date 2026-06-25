@@ -62,10 +62,25 @@
         border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
         padding: 5px 8px; letter-spacing: 1px;
     }
+    tr.mes-continuacion td {
+        background: #e5e7eb; color: #0A1628;
+        font-weight: bold; font-size: 11px; text-align: center;
+        border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
+        padding: 4px 8px;
+        font-style: italic;
+    }
     tr.cuenta-row:nth-child(even) td { background: #fafafa; }
     tr.sumas-row td {
         background: #EEF2F7; font-weight: bold;
         border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
+    }
+
+    .folio-header {
+        font-family: Arial, sans-serif;
+        font-size: 11px;
+        color: #475569;
+        white-space: nowrap;
+        padding-top: 2px;
     }
 
     .info-box {
@@ -96,6 +111,15 @@
     }
     .spinner-texto { color: white; font-size: 14px; font-weight: 600; }
     @keyframes girar { to { transform: rotate(360deg); } }
+
+    @media print {
+        .no-print { display: none !important; }
+        .balance-wrapper { page-break-after: always; box-shadow: none; padding: 10px 0; }
+        .balance-wrapper:last-child { page-break-after: avoid; }
+        .balance-table th, tr.mes-header td, tr.mes-continuacion td, tr.sumas-row td {
+            -webkit-print-color-adjust: exact; print-color-adjust: exact;
+        }
+    }
 </style>
 
 <div class="form-container">
@@ -163,12 +187,14 @@
     <div class="info-box no-print">
         <i class="fas fa-info-circle"></i>
         Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} &nbsp;|&nbsp;
-        {{ cuadros|length }} mes(es)
+        {{ total_meses }} mes(es) &nbsp;|&nbsp;
+        {{ total_paginas }} página(s)
     </div>
 
+    {% for pagina in paginas %}
     <div class="balance-wrapper">
 
-        <!-- Encabezado -->
+        <!-- Encabezado con número de página -->
         <div style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:14px;">
             <div style="flex:1;text-align:center;">
                 <strong style="font-family:Arial,sans-serif;font-size:15px;color:#0A1628;display:block;margin-bottom:2px;">BALANCE DE SALDOS</strong>
@@ -182,14 +208,25 @@
                     (Expresado en Quetzales)
                 </span>
             </div>
+            {% if total_paginas > 1 %}
+            <div class="folio-header">
+                Folio No. {{ pagina.numero }}
+            </div>
+            {% endif %}
         </div>
 
-        {% for cuadro in cuadros %}
-        <table class="balance-table" style="margin-bottom:20px;">
+        {% for parte in pagina.partes %}
+        <table class="balance-table" style="margin-bottom:{% if parte.mostrar_totales %}20px{% else %}0px{% endif %};">
             <thead>
+                {% if parte.es_inicio_mes %}
                 <tr class="mes-header">
-                    <td colspan="3">{{ cuadro.mes }}</td>
+                    <td colspan="3">{{ parte.mes }}</td>
                 </tr>
+                {% else %}
+                <tr class="mes-continuacion">
+                    <td colspan="3">{{ parte.mes }} (continuación)</td>
+                </tr>
+                {% endif %}
                 <tr>
                     <th class="col-cuenta">Nombre de la Cuenta</th>
                     <th class="col-monto">Debe</th>
@@ -197,23 +234,27 @@
                 </tr>
             </thead>
             <tbody>
-                {% for c in cuadro.cuentas %}
+                {% for c in parte.cuentas %}
                 <tr class="cuenta-row">
                     <td class="col-cuenta">{{ c.nombre }}</td>
                     <td class="col-monto">{% if c.debe > 0 %}{{ c.debe|monto }}{% endif %}</td>
                     <td class="col-monto">{% if c.haber > 0 %}{{ c.haber|monto }}{% endif %}</td>
                 </tr>
                 {% endfor %}
+                {% if parte.mostrar_totales %}
                 <tr class="sumas-row">
                     <td class="col-cuenta" style="text-align:right;">Sumas Iguales</td>
-                    <td class="col-monto">{{ cuadro.total_debe|monto }}</td>
-                    <td class="col-monto">{{ cuadro.total_haber|monto }}</td>
+                    <td class="col-monto">{{ parte.total_debe|monto }}</td>
+                    <td class="col-monto">{{ parte.total_haber|monto }}</td>
                 </tr>
+                {% endif %}
             </tbody>
         </table>
         {% endfor %}
 
     </div>
+    {% endfor %}
+
     {% endif %}
 </div>
 
