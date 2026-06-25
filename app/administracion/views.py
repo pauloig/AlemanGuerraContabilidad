@@ -1939,10 +1939,10 @@ def libro_diario_excel(request):
 
     # Totales generales
     fila += 1
-    celda(fila, 1, '', relleno=fill_total, bordes=borde)
-    celda(fila, 2, 'TOTALES GENERALES DEL PERÍODO', fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde)
-    celda(fila, 3, float(total_debe_general),  fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
-    celda(fila, 4, float(total_haber_general), fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
+    #celda(fila, 1, '', relleno=fill_total, bordes=borde)
+    #celda(fila, 2, 'TOTALES GENERALES DEL PERÍODO', fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde)
+    #celda(fila, 3, float(total_debe_general),  fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
+    #celda(fila, 4, float(total_haber_general), fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
 
     # Configuración de impresión
     ws.page_setup.paperSize  = ws.PAPERSIZE_LETTER
@@ -2128,21 +2128,9 @@ def libro_diario_pdf(request):
   <td class="col-monto">{pagina['van_haber']:,.2f}</td>
 </tr>"""
 
-        html += '</tbody></table>'
+        html += '</tbody></table> </body></html>'
 
-    html += f"""
-<table style="margin-top:6pt;">
-<tbody>
-<tr class="row-total">
-  <td class="col-partida"></td>
-  <td class="col-cuenta">TOTALES GENERALES DEL PERIODO</td>
-  <td class="col-auxiliar"></td>
-  <td class="col-monto">{total_debe_general:,.2f}</td>
-  <td class="col-monto">{total_haber_general:,.2f}</td>
-</tr>
-</tbody>
-</table>
-</body></html>"""
+   
 
     buffer = BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
