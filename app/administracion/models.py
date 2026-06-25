@@ -642,6 +642,13 @@ class Asiento(models.Model):
         null=True,
         blank=True
     )
+    
+    folio = models.IntegerField(
+        verbose_name="Folio",
+        null=True,
+        blank=True
+    )
+    
     anio = models.IntegerField(verbose_name="Año", null=True, blank=True)
     mes = models.IntegerField(verbose_name="Mes", null=True, blank=True)
     

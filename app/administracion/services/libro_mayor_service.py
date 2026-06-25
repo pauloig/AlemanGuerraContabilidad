@@ -76,10 +76,10 @@ class LibroMayorService:
             .filter(id__in=cuentas_ids)
             .select_related('id_subgrupo', 'id_subgrupo__id_grupo', 'id_area_contable')
             .order_by(
-                'id_area_contable__orden',
-                'id_subgrupo__orden',
-                'orden',
-            )
+            #    'id_area_contable__orden',
+            #    'id_subgrupo__orden',
+            #    'orden',
+            'id', )
         )
 
         bloques = []
@@ -109,7 +109,7 @@ class LibroMayorService:
                     id_asiento__in=asientos_rango,
                 )
                 .select_related('id_asiento')
-                .order_by('id_asiento__fecha', 'id_asiento__correlativo')
+                .order_by('id_asiento__fecha', 'id')
             )
 
             filas = []
@@ -147,7 +147,7 @@ class LibroMayorService:
                     'fecha':        asiento.fecha,
                     'texto_mes':    MESES[asiento.fecha.month],
                     'texto_dia':    str(asiento.fecha.day),
-                    'correlativo':  asiento.correlativo,
+                    'correlativo':  asiento.folio,
                     'descripcion':  descripcion,
                     'debe':         debe,
                     'haber':        haber,

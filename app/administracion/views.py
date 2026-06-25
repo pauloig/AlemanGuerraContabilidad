@@ -3152,6 +3152,30 @@ def libro_mayor(request):
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
+    
+    # Validar si hay asientos con folio 0 o None
+    tiene_folio_vacio = Asiento.objects.filter(
+        id_empresa_periodo__id_empresa_id=empresa.id,
+        id_empresa_periodo__id_periodo__fecha_inicial__lte=fecha_hasta,
+        id_empresa_periodo__id_periodo__fecha_final__gte=fecha_desde,
+        estatus=1
+    ).filter(
+        Q(folio__isnull=True) | Q(folio=0)
+    ).exists()
+
+    if tiene_folio_vacio:
+        # Ejecutar get_libro_diario para reprocesar y asignar folios
+        from administracion.services.libro_diario_service import LibroDiarioService
+        asientos = Asiento.objects.filter(
+            id_empresa_periodo__id_empresa_id=empresa.id,
+            id_empresa_periodo__id_periodo__fecha_inicial__lte=fecha_hasta,
+            id_empresa_periodo__id_periodo__fecha_final__gte=fecha_desde,
+            estatus=1
+        ).order_by('fecha', 'id')
+        
+        bloques_diario = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+        paginas_diario = LibroDiarioService.paginar_con_van_vienen(bloques_diario)
+
 
     if not bloques:
         return render(request, 'administracion/reportes/libro_mayor.html', {
@@ -3256,7 +3280,7 @@ def libro_mayor_excel(request):
 
         merge_row(fila, nombre_cuenta, fnt_gold, fill_cuenta, 15); fila += 1
 
-        for c, txt in enumerate(['MES', 'DÍA', 'PARTIDA', 'NOMBRE', 'DEBE', 'HABER', 'SALDO'], 1):
+        for c, txt in enumerate(['MES', 'DÍA', 'DIARIO FOLIO', 'NOMBRE', 'DEBE', 'HABER', 'SALDO'], 1):
             cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_col_hdr)
         ws.row_dimensions[fila].height = 14; fila += 1
 
@@ -3370,6 +3394,7 @@ def libro_mayor_pdf(request):
 
         html += f"""
 <table class="enc-tabla">
+
   <tr>
     <td class="enc-izq">
       <div class="enc-titulo">LIBRO MAYOR</div>
@@ -3389,11 +3414,11 @@ def libro_mayor_pdf(request):
                 f"<strong>{cuenta.nombre}</strong>"
             )
             html += f"""<table>
-<tr class="hdr-cuenta"><td colspan="7"><strong>{cuenta.nombre}</strong></td></tr>
+<tr class="hdr-cuenta"><td colspan="7"><span style="text-align: center; display: block;"><strong>{cuenta.nombre}</strong></span></td></tr>
 <tr>
   <th class="col-mes">MES</th>
   <th class="col-dia">DÍA</th>
-  <th class="col-partida">PARTIDA</th>
+  <th class="col-partida">DIARIO FOLIO</th>
   <th class="col-desc">NOMBRE</th>
   <th class="col-monto">DEBE</th>
   <th class="col-monto">HABER</th>

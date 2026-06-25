@@ -1,4 +1,5 @@
 from decimal import Decimal
+from administracion.models import Asiento, Movimiento
 
 MESES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
@@ -37,11 +38,14 @@ class LibroDiarioService:
                 mes_actual   = mes
                 fecha_actual = None
                 bloques.append({'tipo': 'separador_mes', 'texto': mes})
-                
-                
-                
-                
+                              
+                           
             correlativo_nuevo += 1
+            
+            #ACTUALIZO EL CORRELATIVO DE ASIENTO
+            partida_actual = Asiento.objects.filter(id = asiento.id).first()
+            partida_actual.correlativo = correlativo_nuevo
+            partida_actual.save()
 
             #if asiento.fecha != fecha_actual:
             fecha_actual = asiento.fecha
@@ -113,6 +117,7 @@ class LibroDiarioService:
                 'filas':       filas,
                 'total_debe':  total_debe,
                 'total_haber': total_haber,
+                'asiento_id': asiento.id,
             })
 
         return bloques
@@ -147,6 +152,7 @@ class LibroDiarioService:
                         '_asiento_debe':         bloque['total_debe'],
                         '_asiento_haber':        bloque['total_haber'],
                         '_es_ultima_de_asiento': fila['tipo'] == 'espacio',
+                        'asiento_id':            bloque['asiento_id'],
                     })
                     primer = False
 
@@ -240,6 +246,9 @@ class LibroDiarioService:
                     cerrar_pagina()
             elif lineas_usadas >= lineas_por_pagina:
                 cerrar_pagina()
+                
+            if fila.get('correlativo') is not None and fila.get('asiento_id') is not None:
+                Asiento.objects.filter(id=fila['asiento_id']).update(folio=len(paginas) + 1)
 
             pagina_actual.append(fila)
             lineas_usadas += 1
