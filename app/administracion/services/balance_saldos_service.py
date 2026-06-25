@@ -13,7 +13,7 @@ MESES = {
 
 class BalanceSaldosService:
 
-    LINEAS_POR_PAGINA = 35  # Líneas de datos por página
+    LINEAS_POR_PAGINA = 40  # Líneas de datos por página
 
     @staticmethod
     def get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta):
@@ -25,23 +25,14 @@ class BalanceSaldosService:
             'cuentas': [
                 {
                     'nombre': str,
-                    'debe': Decimal,
-                    'haber': Decimal,
+                    'debe': Decimal,    # Saldo neto (si es positivo)
+                    'haber': Decimal,   # Saldo neto (si es negativo)
                 }
             ],
-            'total_debe': Decimal,
-            'total_haber': Decimal,
-            'cuadrado': bool,
+            'total_debe': Decimal,      # Suma de todos los saldos netos positivos
+            'total_haber': Decimal,     # Suma de todos los saldos netos negativos
+            'cuadrado': bool,           # total_debe == total_haber
         }
-        
-        NOTA: Cada cuenta muestra su SALDO NETO (Debe - Haber):
-        - Si el saldo neto es POSITIVO: se muestra en la columna DEBE
-        - Si el saldo neto es NEGATIVO: se muestra en la columna HABER (valor absoluto)
-        - Si el saldo neto es CERO: se muestra 0 en ambas columnas
-        
-        Los totales del mes (Sumas Iguales) siguen mostrando la suma de TODOS los
-        débitos y créditos reales, NO el saldo neto. Esto mantiene la validación
-        contable de que el mes está cuadrado.
         """
         from administracion.models import Movimiento, Asiento, Cuenta
 
@@ -51,7 +42,6 @@ class BalanceSaldosService:
             fecha__range=[fecha_desde, fecha_hasta]
         ).order_by('fecha')
 
-        # Agrupar asientos por mes
         meses_dict = defaultdict(list)
         for asiento in asientos_rango:
             clave = (asiento.fecha.year, asiento.fecha.month)
@@ -63,7 +53,6 @@ class BalanceSaldosService:
             asiento_ids = meses_dict[(año, mes_num)]
             asientos_mes = Asiento.objects.filter(id__in=asiento_ids)
 
-            # Cuentas con movimientos en este mes
             cuentas_ids = (
                 Movimiento.objects
                 .filter(id_asiento__in=asientos_mes)
@@ -91,30 +80,22 @@ class BalanceSaldosService:
                     haber=Sum('monto', filter=Q(tipo_movimiento=2)),
                 )
                 
-                # Obtener los valores reales de débitos y créditos
                 debe_raw = totales['debe'] or Decimal('0')
                 haber_raw = totales['haber'] or Decimal('0')
-
-                # Calcular el saldo neto (Debe - Haber)
                 saldo_neto = debe_raw - haber_raw
 
-                # Asignar el saldo neto a la columna correspondiente
                 if saldo_neto > 0:
-                    # Saldo deudor: va en la columna DEBE
                     debe = saldo_neto
                     haber = Decimal('0')
                 elif saldo_neto < 0:
-                    # Saldo acreedor: va en la columna HABER (valor absoluto)
                     debe = Decimal('0')
                     haber = abs(saldo_neto)
                 else:
-                    # Saldo cero: 0 en ambas columnas
                     debe = Decimal('0')
                     haber = Decimal('0')
 
-                # Acumular totales REALES del mes (para Sumas Iguales)
-                total_debe += debe_raw
-                total_haber += haber_raw
+                total_debe += debe
+                total_haber += haber
 
                 filas.append({
                     'nombre': cuenta.nombre,
@@ -135,46 +116,36 @@ class BalanceSaldosService:
     @staticmethod
     def paginar(cuadros, lineas_por_pagina=None):
         """
-        Pagina los cuadros mensuales.
-        A diferencia de la versión anterior, esta versión PERMITE CORTAR UN MES
-        cuando se alcanza el límite de líneas por página.
+        Pagina los cuadros mensuales con VAN/VIENEN y optimización de espacio.
         
-        Cada mes se divide en "partes" (slices) si es necesario.
-        Cada parte contiene:
-        - Título del mes (solo en la primera parte)
-        - Encabezados de columnas
-        - Un subconjunto de cuentas
-        - Totales del mes (solo en la última parte del mes)
+        Características:
+        1. Un mes puede ocupar varias páginas si tiene muchas cuentas
+        2. Cada parte de un mes cortado muestra "VAN" (sigue en siguiente página)
+        3. Cada página que continúa un mes muestra "VIENEN" (viene de página anterior)
+        4. Optimización: cuando un mes termina, el siguiente mes comienza inmediatamente
+           en la misma página si hay espacio disponible
         
         Estructura de cada página:
-        [
-            {
-                'numero': 1,
-                'partes': [
-                    {
-                        'mes': 'Enero del 2026',
-                        'es_inicio_mes': True,
-                        'es_fin_mes': False,
-                        'cuentas': [...],
-                        'total_debe': Decimal,
-                        'total_haber': Decimal,
-                        'cuadrado': bool,
-                    },
-                    {
-                        'mes': 'Enero del 2026',
-                        'es_inicio_mes': False,
-                        'es_fin_mes': True,
-                        'cuentas': [...],
-                        'total_debe': Decimal,
-                        'total_haber': Decimal,
-                        'cuadrado': bool,
-                    },
-                ],
-                'es_primera': True/False,
-                'es_ultima': True/False,
-            },
-            ...
-        ]
+        {
+            'numero': 1,
+            'partes': [
+                {
+                    'mes': 'Enero del 2026',
+                    'es_inicio_mes': True/False,
+                    'es_fin_mes': True/False,
+                    'es_mes_cortado': True/False,  # Si el mes se cortó en esta página
+                    'tiene_vienen': True/False,     # Si esta parte viene de página anterior
+                    'tiene_van': True/False,        # Si esta parte continúa en siguiente página
+                    'cuentas': [...],
+                    'total_debe': Decimal,
+                    'total_haber': Decimal,
+                    'cuadrado': bool,
+                    'mostrar_totales': True/False,
+                }
+            ],
+            'es_primera': True/False,
+            'es_ultima': True/False,
+        }
         """
         if lineas_por_pagina is None:
             lineas_por_pagina = BalanceSaldosService.LINEAS_POR_PAGINA
@@ -182,77 +153,95 @@ class BalanceSaldosService:
         paginas = []
         pagina_actual = []
         lineas_usadas = 0
+        
+        # Variables para controlar el estado del mes actual
+        mes_actual = None
+        mes_inicio_pagina_actual = False  # Si el mes actual comenzó en esta página
 
         def cerrar_pagina():
-            nonlocal pagina_actual, lineas_usadas
+            nonlocal pagina_actual, lineas_usadas, mes_inicio_pagina_actual
+            
+            # Determinar si la página tiene VAN (mes cortado que continúa)
+            tiene_van = False
+            if pagina_actual:
+                # Buscar la última parte que tenga es_fin_mes = False (mes cortado)
+                for parte in reversed(pagina_actual):
+                    if not parte['es_fin_mes'] and parte['es_mes_cortado']:
+                        tiene_van = True
+                        break
+                    # Si encontramos una parte que es fin de mes, no hay VAN
+                    if parte['es_fin_mes']:
+                        break
+            
             paginas.append({
                 'numero': len(paginas) + 1,
                 'partes': list(pagina_actual),
                 'es_primera': len(paginas) == 0,
                 'es_ultima': False,
+                'tiene_van': tiene_van,
             })
             pagina_actual = []
             lineas_usadas = 0
+            mes_inicio_pagina_actual = False
 
-        for cuadro in cuadros:
+        for idx, cuadro in enumerate(cuadros):
             mes = cuadro['mes']
             cuentas = cuadro['cuentas']
             total_debe = cuadro['total_debe']
             total_haber = cuadro['total_haber']
             cuadrado = cuadro['cuadrado']
             
-            # Calcular líneas base del mes (título + encabezado + totales + separador)
-            # 1 título + 1 encabezado + 1 totales + 1 separador = 4 líneas fijas
-            lineas_fijas = 4
             num_cuentas = len(cuentas)
-            
-            # Verificar si el mes completo cabe en la página actual
-            if lineas_usadas > 0 and lineas_usadas + lineas_fijas + num_cuentas > lineas_por_pagina:
-                # El mes NO cabe completo, cerrar página actual
-                cerrar_pagina()
-            
-            # Ahora procesamos el mes, posiblemente en partes
-            # Calcular cuántas cuentas caben en la página actual
-            espacio_disponible = lineas_por_pagina - lineas_usadas - lineas_fijas
-            cuentas_para_esta_pagina = min(num_cuentas, espacio_disponible)
-            
-            if cuentas_para_esta_pagina <= 0 and lineas_usadas > 0:
-                # No cabe ni una cuenta, cerrar página y empezar de nuevo
-                cerrar_pagina()
-                # Recalcular con página vacía
-                espacio_disponible = lineas_por_pagina - lineas_fijas
-                cuentas_para_esta_pagina = min(num_cuentas, espacio_disponible)
-            
-            # Variable para saber si el mes ya está completamente procesado
             indice_inicio = 0
             
+            # Procesar el mes, dividiéndolo en partes si es necesario
             while indice_inicio < num_cuentas:
-                # Calcular cuántas cuentas caben en esta parte
+                # Calcular cuántas líneas ocupa este mes desde el punto actual
+                # 1 título + 1 encabezado + N cuentas + 1 totales + 1 separador = N + 4
+                lineas_fijas = 4
+                
+                # Verificar si es inicio del mes (primera parte)
+                es_inicio_mes = (indice_inicio == 0)
+                
+                # Calcular espacio disponible en la página actual
                 espacio_disponible = lineas_por_pagina - lineas_usadas - lineas_fijas
                 
-                # Si no hay espacio, cerrar página
-                if espacio_disponible <= 0:
+                # Si no hay espacio y la página tiene contenido, cerrar página
+                if espacio_disponible <= 0 and lineas_usadas > 0:
                     cerrar_pagina()
-                    continue
+                    # Resetear variables de mes
+                    es_inicio_mes = (indice_inicio == 0)
+                    espacio_disponible = lineas_por_pagina - lineas_fijas
                 
-                cuentas_para_esta_parte = min(
-                    num_cuentas - indice_inicio,
-                    espacio_disponible
-                )
+                # Calcular cuántas cuentas caben en esta parte
+                cuentas_restantes = num_cuentas - indice_inicio
+                cuentas_para_esta_parte = min(cuentas_restantes, max(espacio_disponible, 1))
+                
+                # Si es la primera parte del mes, actualizar bandera
+                if es_inicio_mes:
+                    mes_inicio_pagina_actual = True
                 
                 # Extraer el slice de cuentas
                 cuentas_slice = cuentas[indice_inicio:indice_inicio + cuentas_para_esta_parte]
                 indice_inicio += cuentas_para_esta_parte
                 
-                # Determinar si es inicio y/o fin del mes
-                es_inicio_mes = (indice_inicio - cuentas_para_esta_parte) == 0
-                es_fin_mes = indice_inicio >= num_cuentas
+                # Determinar si es fin del mes
+                es_fin_mes = (indice_inicio >= num_cuentas)
+                
+                # Determinar si el mes está cortado (ocupa más de una página)
+                es_mes_cortado = (not es_fin_mes) or (not es_inicio_mes and num_cuentas > 0)
+                
+                # Determinar si tiene VIENEN (viene de página anterior)
+                tiene_vienen = (not es_inicio_mes)
                 
                 # Crear la parte del mes
                 parte = {
                     'mes': mes,
                     'es_inicio_mes': es_inicio_mes,
                     'es_fin_mes': es_fin_mes,
+                    'es_mes_cortado': es_mes_cortado,
+                    'tiene_vienen': tiene_vienen,
+                    'tiene_van': False,  # Se establecerá al cerrar la página
                     'cuentas': cuentas_slice,
                     'total_debe': total_debe if es_fin_mes else Decimal('0'),
                     'total_haber': total_haber if es_fin_mes else Decimal('0'),
@@ -263,8 +252,6 @@ class BalanceSaldosService:
                 pagina_actual.append(parte)
                 
                 # Calcular líneas usadas por esta parte
-                # 1 título (solo si es inicio) + 1 encabezado (solo si es inicio) 
-                # + N cuentas + 1 totales (solo si es fin) + 1 separador (solo si es fin)
                 lineas_parte = len(cuentas_slice)
                 if es_inicio_mes:
                     lineas_parte += 2  # título + encabezado
@@ -275,19 +262,38 @@ class BalanceSaldosService:
                 
                 # Si el mes no terminó, cerrar página para continuar en la siguiente
                 if not es_fin_mes:
-                    cerrar_pagina()
-            
-            # Después de procesar el mes completo, si la página no está llena, 
-            # intentar agregar el siguiente mes
-            # Pero esto se maneja en la siguiente iteración del bucle
+                    # Antes de cerrar, verificar si hay espacio para el siguiente mes
+                    # Si es la última parte del mes y no hay más cuentas, no cerrar aún
+                    if indice_inicio < num_cuentas:
+                        cerrar_pagina()
+                        # IMPORTANTE: Al cerrar página, el siguiente ciclo comenzará
+                        # con la variable es_inicio_mes = False para la continuación
+                else:
+                    # El mes terminó, pero NO cerramos la página inmediatamente
+                    # Permitimos que el siguiente mes intente usar el espacio disponible
+                    pass
 
         # Cerrar la última página si tiene contenido
         if pagina_actual:
+            # Determinar si la última página tiene VAN
+            tiene_van = False
+            for parte in reversed(pagina_actual):
+                if not parte['es_fin_mes'] and parte['es_mes_cortado']:
+                    tiene_van = True
+                    break
+                if parte['es_fin_mes']:
+                    break
+            
             paginas.append({
                 'numero': len(paginas) + 1,
                 'partes': list(pagina_actual),
                 'es_primera': len(paginas) == 0,
                 'es_ultima': True,
+                'tiene_van': tiene_van,
             })
+
+        # Marcar correctamente la última página
+        if paginas:
+            paginas[-1]['es_ultima'] = True
 
         return paginas

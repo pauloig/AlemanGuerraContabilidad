@@ -2923,6 +2923,7 @@ def balance_saldos_excel(request):
     fnt_bold   = Font(bold=True, size=10)
     fnt_normal = Font(size=10)
     fnt_italica = Font(size=9, italic=True)
+    fnt_van_vienen = Font(bold=True, size=9, color='92400E')
     fnt_white  = Font(bold=True, size=10, color='FFFFFF')
 
     aln_center = Alignment(horizontal='center', vertical='center')
@@ -2937,12 +2938,17 @@ def balance_saldos_excel(request):
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='medium'), bottom=Side(style='thin')
     )
+    borde_van = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='medium'), bottom=Side(style='medium')
+    )
 
     fill_header = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
     fill_mes    = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
     fill_mes_cont = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
     fill_sumas  = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
     fill_alt    = PatternFill(start_color='FAFAFA', end_color='FAFAFA', fill_type='solid')
+    fill_van_vienen = PatternFill(start_color='FEF3C7', end_color='FEF3C7', fill_type='solid')
 
     ws.column_dimensions['A'].width = 50
     ws.column_dimensions['B'].width = 18
@@ -2992,7 +2998,12 @@ def balance_saldos_excel(request):
             fila += 1
 
         # Procesar cada parte del mes en la página
-        for parte in pagina['partes']:
+        for idx, parte in enumerate(pagina['partes']):
+            # VIENEN (viene de página anterior)
+            if parte.get('tiene_vienen', False):
+                merge(fila, 'VIENEN DE PÁGINA ANTERIOR', fnt_van_vienen, fill_van_vienen, 12)
+                fila += 1
+
             # Encabezado del mes
             if parte['es_inicio_mes']:
                 merge(fila, parte['mes'], fnt_bold, fill_mes, 13)
@@ -3021,6 +3032,11 @@ def balance_saldos_excel(request):
                 cel(fila, 2, float(parte['total_debe']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00', borde_cell=borde_superior)
                 cel(fila, 3, float(parte['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_sumas, fmt='#,##0.00', borde_cell=borde_superior)
                 fila += 2
+
+        # VAN (continúa en siguiente página)
+        if pagina.get('tiene_van', False):
+            merge(fila, 'VAN A PÁGINA SIGUIENTE', fnt_van_vienen, fill_van_vienen, 12)
+            fila += 1
 
         # Salto de página entre páginas (excepto última)
         if not pagina['es_ultima']:
@@ -3094,11 +3110,18 @@ def balance_saldos_pdf(request):
   .row-mes-cont td {{ background-color: #E5E7EB; color: #0A1628; font-weight: bold;
                       text-align: center; border: 0.5pt solid #94a3b8;
                       border-bottom: 1pt solid #94a3b8; padding: 2px 5px; font-style: italic; }}
+  .row-vienen td {{ background-color: #FEF3C7; color: #92400E; font-weight: bold;
+                    text-align: center; border: 0.5pt solid #94a3b8;
+                    border-bottom: 1pt solid #94a3b8; padding: 2px 5px; }}
+  .row-van td {{ background-color: #FEF3C7; color: #92400E; font-weight: bold;
+                 text-align: center; border: 0.5pt solid #94a3b8;
+                 border-top: 1pt solid #94a3b8; padding: 2px 5px; }}
   .row-alt td  {{ background-color: #FAFAFA; }}
   .row-sumas td {{ background-color: #EEF2F7; font-weight: bold;
                    border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
   .sin-totales {{ margin-bottom: 0px !important; }}
   .con-totales {{ margin-bottom: 10pt !important; }}
+  .van-vienen-spacer {{ height: 2pt; background: white; border: none; }}
 </style></head><body>
 """
 
@@ -3123,9 +3146,19 @@ def balance_saldos_pdf(request):
 """
 
         for parte in pagina['partes']:
+            # VIENEN (viene de página anterior)
+            if parte.get('tiene_vienen', False):
+                html += """<table style="margin-bottom:2pt;">
+<tr class="row-vienen"><td colspan="3">VIENEN DE PÁGINA ANTERIOR</td></tr>
+</table>"""
+
             # Determinar clase CSS para el encabezado del mes
-            cls_mes = 'row-mes' if parte['es_inicio_mes'] else 'row-mes-cont'
-            texto_mes = parte['mes'] if parte['es_inicio_mes'] else f"{parte['mes']} (continuación)"
+            if parte['es_inicio_mes']:
+                cls_mes = 'row-mes'
+                texto_mes = parte['mes']
+            else:
+                cls_mes = 'row-mes-cont'
+                texto_mes = f"{parte['mes']} (continuación)"
             
             # Determinar si mostrar totales
             cls_tabla = 'con-totales' if parte['mostrar_totales'] else 'sin-totales'
@@ -3156,6 +3189,12 @@ def balance_saldos_pdf(request):
 </tr>"""
 
             html += "</table>"
+
+        # VAN (continúa en siguiente página)
+        if pagina.get('tiene_van', False):
+            html += """<table style="margin-top:4pt;">
+<tr class="row-van"><td colspan="3">VAN A PÁGINA SIGUIENTE</td></tr>
+</table>"""
 
     html += '</body></html>'
 

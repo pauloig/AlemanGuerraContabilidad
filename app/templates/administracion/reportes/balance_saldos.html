@@ -69,6 +69,18 @@
         padding: 4px 8px;
         font-style: italic;
     }
+    tr.mes-vienen td {
+        background: #fef3c7; color: #92400e;
+        font-weight: bold; font-size: 11px; text-align: center;
+        border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
+        padding: 4px 8px;
+    }
+    tr.mes-van td {
+        background: #fef3c7; color: #92400e;
+        font-weight: bold; font-size: 11px; text-align: center;
+        border: 0.5px solid #94a3b8; border-top: 1.5px solid #94a3b8;
+        padding: 4px 8px;
+    }
     tr.cuenta-row:nth-child(even) td { background: #fafafa; }
     tr.sumas-row td {
         background: #EEF2F7; font-weight: bold;
@@ -116,7 +128,8 @@
         .no-print { display: none !important; }
         .balance-wrapper { page-break-after: always; box-shadow: none; padding: 10px 0; }
         .balance-wrapper:last-child { page-break-after: avoid; }
-        .balance-table th, tr.mes-header td, tr.mes-continuacion td, tr.sumas-row td {
+        .balance-table th, tr.mes-header td, tr.mes-continuacion td, 
+        tr.mes-vienen td, tr.mes-van td, tr.sumas-row td {
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
     }
@@ -218,6 +231,14 @@
         {% for parte in pagina.partes %}
         <table class="balance-table" style="margin-bottom:{% if parte.mostrar_totales %}20px{% else %}0px{% endif %};">
             <thead>
+                <!-- VIENEN (viene de página anterior) -->
+                {% if parte.tiene_vienen %}
+                <tr class="mes-vienen">
+                    <td colspan="3">VIENEN DE PÁGINA ANTERIOR</td>
+                </tr>
+                {% endif %}
+
+                <!-- Título del mes -->
                 {% if parte.es_inicio_mes %}
                 <tr class="mes-header">
                     <td colspan="3">{{ parte.mes }}</td>
@@ -227,6 +248,8 @@
                     <td colspan="3">{{ parte.mes }} (continuación)</td>
                 </tr>
                 {% endif %}
+
+                <!-- Encabezados de columnas -->
                 <tr>
                     <th class="col-cuenta">Nombre de la Cuenta</th>
                     <th class="col-monto">Debe</th>
@@ -241,6 +264,8 @@
                     <td class="col-monto">{% if c.haber > 0 %}{{ c.haber|monto }}{% endif %}</td>
                 </tr>
                 {% endfor %}
+
+                <!-- Totales del mes (solo si es la última parte) -->
                 {% if parte.mostrar_totales %}
                 <tr class="sumas-row">
                     <td class="col-cuenta" style="text-align:right;">Sumas Iguales</td>
@@ -251,6 +276,13 @@
             </tbody>
         </table>
         {% endfor %}
+
+        <!-- VAN (continúa en siguiente página) -->
+        {% if pagina.tiene_van %}
+        <div style="text-align:center;padding:5px 0;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;margin-top:5px;font-weight:bold;font-size:11px;color:#92400e;">
+            VAN A PÁGINA SIGUIENTE
+        </div>
+        {% endif %}
 
     </div>
     {% endfor %}
