@@ -53,8 +53,8 @@
         border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
         padding: 4px 7px;
     }
-    .col-cuenta { text-align: left; }
-    .col-monto  { width: 130px; text-align: right; font-family: monospace; }
+    .col-cuenta { text-align: left; width: 55%; }
+    .col-monto  { width: 22.5%; text-align: right; font-family: monospace; }
 
     tr.mes-header td {
         background: #d1d5db; color: #0A1628;
@@ -69,22 +69,27 @@
         padding: 4px 8px;
         font-style: italic;
     }
-    tr.mes-vienen td {
-        background: #fef3c7; color: #92400e;
-        font-weight: bold; font-size: 11px; text-align: center;
-        border: 0.5px solid #94a3b8; border-bottom: 1.5px solid #94a3b8;
-        padding: 4px 8px;
-    }
-    tr.mes-van td {
-        background: #fef3c7; color: #92400e;
-        font-weight: bold; font-size: 11px; text-align: center;
-        border: 0.5px solid #94a3b8; border-top: 1.5px solid #94a3b8;
-        padding: 4px 8px;
-    }
     tr.cuenta-row:nth-child(even) td { background: #fafafa; }
     tr.sumas-row td {
         background: #EEF2F7; font-weight: bold;
         border-top: 1.5px solid #000; border-bottom: 1.5px solid #000;
+    }
+    tr.van-row td {
+        font-weight: bold;
+        border-top: 1.5px solid #000;
+        border-bottom: none;
+        padding: 3px 7px;
+    }
+    tr.vienen-row td {
+        font-weight: bold;
+        border-top: none;
+        border-bottom: 1.5px solid #000;
+        padding: 3px 7px;
+    }
+    .texto-van-vienen {
+        text-align: left;
+        padding-left: 7px;
+        font-weight: bold;
     }
 
     .folio-header {
@@ -128,8 +133,8 @@
         .no-print { display: none !important; }
         .balance-wrapper { page-break-after: always; box-shadow: none; padding: 10px 0; }
         .balance-wrapper:last-child { page-break-after: avoid; }
-        .balance-table th, tr.mes-header td, tr.mes-continuacion td, 
-        tr.mes-vienen td, tr.mes-van td, tr.sumas-row td {
+        .balance-table th, tr.mes-header td, tr.mes-continuacion td, tr.sumas-row td,
+        tr.van-row td, tr.vienen-row td {
             -webkit-print-color-adjust: exact; print-color-adjust: exact;
         }
     }
@@ -231,13 +236,6 @@
         {% for parte in pagina.partes %}
         <table class="balance-table" style="margin-bottom:{% if parte.mostrar_totales %}20px{% else %}0px{% endif %};">
             <thead>
-                <!-- VIENEN (viene de página anterior) -->
-                {% if parte.tiene_vienen %}
-                <tr class="mes-vienen">
-                    <td colspan="3">VIENEN DE PÁGINA ANTERIOR</td>
-                </tr>
-                {% endif %}
-
                 <!-- Título del mes -->
                 {% if parte.es_inicio_mes %}
                 <tr class="mes-header">
@@ -257,6 +255,18 @@
                 </tr>
             </thead>
             <tbody>
+                <!-- VIENEN (viene de página anterior) - Dentro de la tabla como una fila más -->
+                {% if pagina.vienen_debe != 0 or pagina.vienen_haber != 0 %}
+                    {% if forloop.first and not parte.es_inicio_mes %}
+                    <tr class="vienen-row">
+                        <td class="texto-van-vienen">VIENEN</td>
+                        <td class="col-monto">{{ pagina.vienen_debe|monto }}</td>
+                        <td class="col-monto">{{ pagina.vienen_haber|monto }}</td>
+                    </tr>
+                    {% endif %}
+                {% endif %}
+
+                <!-- Cuentas -->
                 {% for c in parte.cuentas %}
                 <tr class="cuenta-row">
                     <td class="col-cuenta">{{ c.nombre }}</td>
@@ -273,16 +283,20 @@
                     <td class="col-monto">{{ parte.total_haber|monto }}</td>
                 </tr>
                 {% endif %}
+
+                <!-- VAN (continúa en siguiente página) - Dentro de la tabla como una fila más -->
+                {% if pagina.van_debe != 0 or pagina.van_haber != 0 %}
+                    {% if not pagina.es_ultima and forloop.last %}
+                    <tr class="van-row">
+                        <td class="texto-van-vienen">VAN</td>
+                        <td class="col-monto">{{ pagina.van_debe|monto }}</td>
+                        <td class="col-monto">{{ pagina.van_haber|monto }}</td>
+                    </tr>
+                    {% endif %}
+                {% endif %}
             </tbody>
         </table>
         {% endfor %}
-
-        <!-- VAN (continúa en siguiente página) -->
-        {% if pagina.tiene_van %}
-        <div style="text-align:center;padding:5px 0;background:#fef3c7;border:1px solid #fcd34d;border-radius:4px;margin-top:5px;font-weight:bold;font-size:11px;color:#92400e;">
-            VAN A PÁGINA SIGUIENTE
-        </div>
-        {% endif %}
 
     </div>
     {% endfor %}
