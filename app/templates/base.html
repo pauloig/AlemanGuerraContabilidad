@@ -782,7 +782,7 @@
                 <div class="context-info">
                     {% if empresa_activa and periodo_activo %}
                         <span class="context-text">
-                            <i class="fas fa-building"></i> {{ empresa_activa.nombre_comercial|truncatechars:25 }}
+                            <i class="fas fa-building"></i> {{ empresa_activa.razon_social|truncatechars:25 }}
                         </span>
                         <span class="context-separator">|</span>
                         <span class="context-text">
@@ -790,7 +790,7 @@
                         </span>
                     {% elif empresa_activa %}
                         <span class="context-text warning">
-                            <i class="fas fa-building"></i> {{ empresa_activa.nombre_comercial|truncatechars:25 }}
+                            <i class="fas fa-building"></i> {{ empresa_activa.razon_social|truncatechars:25 }}
                         </span>
                         <span class="context-separator">|</span>
                         <span class="context-text warning">

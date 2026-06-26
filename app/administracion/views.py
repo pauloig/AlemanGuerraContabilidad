@@ -3686,7 +3686,7 @@ def api_empresas_lista(request):
     data = [
         {
             'id': e['id'],
-            'nombre': e['nombre_comercial'] or e['razon_social'],
+            'nombre': e['razon_social'] or e['nombre_comercial'],
             'nit': e['nit'],
         }
         for e in empresas
