@@ -12,7 +12,7 @@ from .forms import *
 from django.utils import timezone
 from datetime import datetime, date
 import json
-from .services.libro_diario_service import LibroDiarioService
+from .services.libro_diario_service import LibroDiarioService, MESES
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, Border, Side, PatternFill
 from openpyxl.utils import get_column_letter
@@ -1640,6 +1640,8 @@ def asiento_detail(request, pk):
 
 # ==================== LIBRO DIARIO ====================
 
+# views.py - Reemplazar la función libro_diario
+
 @login_required
 def libro_diario(request):
     """
@@ -1662,32 +1664,56 @@ def libro_diario(request):
         return redirect('home')
     
     # Procesar filtros
-    fecha_desde = request.GET.get('fecha_desde')
-    fecha_hasta = request.GET.get('fecha_hasta')
+    mes_inicio = request.GET.get('mes_inicio')
+    mes_final = request.GET.get('mes_final')
+    folio_inicial = request.GET.get('folio_inicial', 1)
+    
+    # --- Validar y asignar folio inicial ---
+    try:
+        folio_inicial = int(folio_inicial)
+        if folio_inicial <= 0:
+            messages.warning(request, 'El folio inicial debe ser mayor a 0. Se usará el valor 1.')
+            folio_inicial = 1
+    except (ValueError, TypeError):
+        messages.warning(request, 'Folio inicial inválido. Se usará el valor 1.')
+        folio_inicial = 1
+    
+    # --- Validar meses ---
+    try:
+        mes_inicio = int(mes_inicio) if mes_inicio else periodo.fecha_inicial.month
+        mes_final = int(mes_final) if mes_final else periodo.fecha_final.month
+    except (ValueError, TypeError):
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+    
+    # Validar que mes_inicio <= mes_final
+    if mes_inicio > mes_final:
+        messages.error(request, 'El mes de inicio no puede ser mayor al mes final.')
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+    
+    # Validar que los meses estén dentro del período
+    if mes_inicio < periodo.fecha_inicial.month:
+        mes_inicio = periodo.fecha_inicial.month
+        messages.warning(request, f'El mes de inicio se ajustó a {MESES[mes_inicio]} por estar fuera del período.')
+    
+    if mes_final > periodo.fecha_final.month:
+        mes_final = periodo.fecha_final.month
+        messages.warning(request, f'El mes final se ajustó a {MESES[mes_final]} por estar fuera del período.')
+    
+    # --- Construir fechas a partir de los meses ---
+    year = periodo.fecha_inicial.year
+    fecha_desde = date(year, mes_inicio, 1)
+    
+    # Calcular fecha final (último día del mes seleccionado)
+    if mes_final == 12:
+        fecha_hasta = date(year, mes_final, 31)
+    else:
+        from calendar import monthrange
+        ultimo_dia = monthrange(year, mes_final)[1]
+        fecha_hasta = date(year, mes_final, ultimo_dia)
+    
     lineas_por_pagina = LibroDiarioService.LINEAS_POR_PAGINA
-    
-    # Fechas por defecto: todo el período
-    if fecha_desde:
-        try:
-            fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date()
-        except ValueError:
-            fecha_desde = periodo.fecha_inicial
-    else:
-        fecha_desde = periodo.fecha_inicial
-    
-    if fecha_hasta:
-        try:
-            fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date()
-        except ValueError:
-            fecha_hasta = periodo.fecha_final
-    else:
-        fecha_hasta = periodo.fecha_final
-    
-    # Validar rango de fechas
-    if fecha_desde > fecha_hasta:
-        messages.error(request, 'La fecha desde no puede ser mayor a la fecha hasta')
-        fecha_desde = periodo.fecha_inicial
-        fecha_hasta = periodo.fecha_final
     
     # Obtener asientos finalizados en el rango de fechas
     asientos = Asiento.objects.filter(
@@ -1702,25 +1728,32 @@ def libro_diario(request):
             'sin_datos': True,
             'empresa': empresa,
             'periodo': periodo,
+            'mes_inicio': mes_inicio,
+            'mes_final': mes_final,
+            'folio_inicial': folio_inicial,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
             'lineas_por_pagina': lineas_por_pagina,
             'app_selected': 7,
+            'MESES': MESES,  # <-- AGREGAR ESTO
         })
     
     # Obtener datos estructurados
     datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
 
-    # Paginar con VAN/VIENEN
-    paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina)
+    # Paginar con VAN/VIENEN y folio inicial
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina, folio_inicial)
 
-    # Totales generales — solo de bloques tipo asiento
+    # Totales generales
     total_debe_general = sum(b['total_debe'] for b in datos if b['tipo'] == 'asiento')
     total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
     
     context = {
         'empresa': empresa,
         'periodo': periodo,
+        'mes_inicio': mes_inicio,
+        'mes_final': mes_final,
+        'folio_inicial': folio_inicial,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
         'lineas_por_pagina': lineas_por_pagina,
@@ -1730,6 +1763,7 @@ def libro_diario(request):
         'fecha_reporte': timezone.now(),
         'sin_datos': False,
         'app_selected': 7,
+        'MESES': MESES,  # <-- AGREGAR ESTO
     }
     
     return render(request, 'administracion/reportes/libro_diario.html', context)
@@ -1738,31 +1772,61 @@ def libro_diario(request):
 
 def _get_libro_diario_datos(request):
     """Helper compartido entre Excel y PDF."""
+    from calendar import monthrange
+    
     empresa_activa_id = request.session.get('empresa_activa_id')
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None
 
-    fecha_desde = request.GET.get('fecha_desde')
-    fecha_hasta = request.GET.get('fecha_hasta')
+    # Obtener parámetros
+    mes_inicio = request.GET.get('mes_inicio')
+    mes_final = request.GET.get('mes_final')
+    folio_inicial = request.GET.get('folio_inicial', 1)
 
+    # Validar folio inicial
     try:
-        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
-    except ValueError:
-        fecha_desde = periodo.fecha_inicial
+        folio_inicial = int(folio_inicial)
+        if folio_inicial <= 0:
+            folio_inicial = 1
+    except (ValueError, TypeError):
+        folio_inicial = 1
 
+    # Validar meses
     try:
-        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
-    except ValueError:
-        fecha_hasta = periodo.fecha_final
+        mes_inicio = int(mes_inicio) if mes_inicio else periodo.fecha_inicial.month
+        mes_final = int(mes_final) if mes_final else periodo.fecha_final.month
+    except (ValueError, TypeError):
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio > mes_final:
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio < periodo.fecha_inicial.month:
+        mes_inicio = periodo.fecha_inicial.month
+
+    if mes_final > periodo.fecha_final.month:
+        mes_final = periodo.fecha_final.month
+
+    # Construir fechas
+    year = periodo.fecha_inicial.year
+    fecha_desde = date(year, mes_inicio, 1)
+
+    if mes_final == 12:
+        fecha_hasta = date(year, mes_final, 31)
+    else:
+        ultimo_dia = monthrange(year, mes_final)[1]
+        fecha_hasta = date(year, mes_final, ultimo_dia)
 
     asientos = Asiento.objects.filter(
         id_empresa_periodo=empresa_periodo,
@@ -1770,12 +1834,16 @@ def _get_libro_diario_datos(request):
         fecha__range=[fecha_desde, fecha_hasta]
     ).order_by('fecha', 'correlativo')
 
-    return empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, None
+    # Retornar también mes_inicio y mes_final para usar en Excel/PDF
+    return empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, folio_inicial, mes_inicio, mes_final
 
 
 @login_required
 def libro_diario_excel(request):
-    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, _ = _get_libro_diario_datos(request)
+    from openpyxl.worksheet.pagebreak import Break
+    
+    # Ahora recibimos 9 valores
+    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, folio_inicial, mes_inicio, mes_final = _get_libro_diario_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -1785,16 +1853,16 @@ def libro_diario_excel(request):
         messages.warning(request, 'No hay datos para exportar')
         return redirect('libro_diario')
 
-    datos  = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
-    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
-    total_debe_general  = sum(b['total_debe']  for b in datos if b['tipo'] == 'asiento')
-    total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
+    datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina=None, folio_inicial=folio_inicial)
+    total_debe_general = sum(b['total_debe'] for b in datos if b['tipo'] == 'asiento')
+    total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')    
 
     wb = Workbook()
     ws = wb.active
     ws.title = "Libro Diario"
 
-    # Estilos
+    # Estilos (igual que antes)
     fnt_titulo   = Font(bold=True, size=13)
     fnt_bold     = Font(bold=True, size=10)
     fnt_normal   = Font(size=10)
@@ -1823,14 +1891,11 @@ def libro_diario_excel(request):
     fill_fecha    = PatternFill(start_color='EEF2F7', end_color='EEF2F7', fill_type='solid')
     fill_comentario = PatternFill(start_color='E5E7EB', end_color='E5E7EB', fill_type='solid')
     fill_van      = PatternFill(start_color='D1D5DB', end_color='D1D5DB', fill_type='solid')
-    fill_total    = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
     fill_detalle  = PatternFill(start_color='F9FAFB', end_color='F9FAFB', fill_type='solid')
 
     fnt_header_white = Font(bold=True, size=10, color='FFFFFF')
     fnt_mes_white    = Font(bold=True, size=10, color='FFFFFF')
-    fnt_total_white  = Font(bold=True, size=10, color='FFFFFF')
 
-    # Columnas: A=Partida(10), B=Cuenta(50), C=Debe(16), D=Haber(16)
     ws.column_dimensions['A'].width = 10
     ws.column_dimensions['B'].width = 52
     ws.column_dimensions['C'].width = 16
@@ -1858,7 +1923,7 @@ def libro_diario_excel(request):
         ws.row_dimensions[r].height = altura
 
     for pagina in paginas:
-        # Encabezado de página
+        # Encabezado de página con folio
         fila_merge(fila, 'LIBRO DIARIO', fnt_titulo, PatternFill(fill_type=None))
         fila += 1
         nombre_emp = empresa.razon_social or empresa.nombre_comercial
@@ -1867,7 +1932,7 @@ def libro_diario_excel(request):
         fila_merge(fila,
             f"Del {fecha_desde.strftime('%d/%m/%Y')} al {fecha_hasta.strftime('%d/%m/%Y')} — "
             f"Período: {periodo.nombre} — (Expresado en Quetzales) — "
-            f"Página {pagina['numero']} de {len(paginas)}",
+            f"Página {pagina['numero']} de {pagina['numero'] + len(paginas) - folio_inicial}",
             Font(size=9), PatternFill(fill_type=None), altura=12)
         fila += 1
 
@@ -1932,17 +1997,8 @@ def libro_diario_excel(request):
             celda(fila, 3, float(pagina['van_debe']),  fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
             celda(fila, 4, float(pagina['van_haber']), fuente=fnt_bold, alineacion=aln_right, relleno=fill_van, bordes=borde, formato='#,##0.00')
             fila += 1
-            # Salto de página Excel
-            from openpyxl.worksheet.pagebreak import Break
             ws.row_breaks.append(Break(id=fila))
             fila += 3
-
-    # Totales generales
-    fila += 1
-    #celda(fila, 1, '', relleno=fill_total, bordes=borde)
-    #celda(fila, 2, 'TOTALES GENERALES DEL PERÍODO', fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde)
-    #celda(fila, 3, float(total_debe_general),  fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
-    #celda(fila, 4, float(total_haber_general), fuente=fnt_total_white, alineacion=aln_right, relleno=fill_total, bordes=borde, formato='#,##0.00')
 
     # Configuración de impresión
     ws.page_setup.paperSize  = ws.PAPERSIZE_LETTER
@@ -1960,7 +2016,6 @@ def libro_diario_excel(request):
     wb.save(response)
     return response
 
-
 @login_required
 def libro_diario_pdf(request):
     from io import BytesIO
@@ -1970,7 +2025,8 @@ def libro_diario_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado. Ejecute: pip install xhtml2pdf')
         return redirect('libro_diario')
 
-    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, _ = _get_libro_diario_datos(request)
+    # Ahora recibimos 9 valores
+    empresa, periodo, fecha_desde, fecha_hasta, asientos, empresa_periodo, folio_inicial, mes_inicio, mes_final = _get_libro_diario_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -1980,9 +2036,11 @@ def libro_diario_pdf(request):
         messages.warning(request, 'No hay datos para exportar')
         return redirect('libro_diario')
 
-    datos   = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
-    paginas = LibroDiarioService.paginar_con_van_vienen(datos)
-    total_debe_general  = sum(b['total_debe']  for b in datos if b['tipo'] == 'asiento')
+    datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
+    paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina=None, folio_inicial=folio_inicial)
+
+
+    total_debe_general = sum(b['total_debe'] for b in datos if b['tipo'] == 'asiento')
     total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
 
     nombre_empresa = empresa.razon_social or empresa.nombre_comercial
@@ -2031,9 +2089,6 @@ def libro_diario_pdf(request):
   .row-van td, .row-vienen td {{ background-color: #EEF2F7; font-weight: bold;
                                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
   .row-van .col-cuenta, .row-vienen .col-cuenta {{ text-align: right; }}
-  .row-total td {{ background-color: #1B2B4E; color: white; font-weight: bold;
-                   border-top: 1pt solid #000; border-bottom: 1pt solid #000; }}
-  .row-total .col-cuenta {{ text-align: right; }}
 </style>
 </head>
 <body>
@@ -2128,9 +2183,9 @@ def libro_diario_pdf(request):
   <td class="col-monto">{pagina['van_haber']:,.2f}</td>
 </tr>"""
 
-        html += '</tbody></table> </body></html>'
+        html += '</tbody></table>'
 
-   
+    html += '</body></html>'
 
     buffer = BytesIO()
     pisa_status = pisa.CreatePDF(html, dest=buffer, encoding='utf-8')
@@ -2827,48 +2882,79 @@ def balance_general_pdf(request):
 
 
 # ==================== BALANCE DE SALDOS ====================
-
 def _get_balance_saldos_datos(request):
+    from calendar import monthrange
     from administracion.services.balance_saldos_service import BalanceSaldosService
 
     empresa_activa_id = request.session.get('empresa_activa_id')
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
-    fecha_desde = request.GET.get('fecha_desde')
-    fecha_hasta = request.GET.get('fecha_hasta')
+    # Obtener parámetros
+    mes_inicio = request.GET.get('mes_inicio')
+    mes_final = request.GET.get('mes_final')
+    folio_inicial = request.GET.get('folio_inicial', 1)
 
+    # Validar folio inicial
     try:
-        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
-    except ValueError:
-        fecha_desde = periodo.fecha_inicial
+        folio_inicial = int(folio_inicial)
+        if folio_inicial <= 0:
+            folio_inicial = 1
+    except (ValueError, TypeError):
+        folio_inicial = 1
 
+    # Validar meses
     try:
-        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
-    except ValueError:
-        fecha_hasta = periodo.fecha_final
+        mes_inicio = int(mes_inicio) if mes_inicio else periodo.fecha_inicial.month
+        mes_final = int(mes_final) if mes_final else periodo.fecha_final.month
+    except (ValueError, TypeError):
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio > mes_final:
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio < periodo.fecha_inicial.month:
+        mes_inicio = periodo.fecha_inicial.month
+
+    if mes_final > periodo.fecha_final.month:
+        mes_final = periodo.fecha_final.month
+
+    # Construir fechas
+    year = periodo.fecha_inicial.year
+    fecha_desde = date(year, mes_inicio, 1)
+
+    if mes_final == 12:
+        fecha_hasta = date(year, mes_final, 31)
+    else:
+        ultimo_dia = monthrange(year, mes_final)[1]
+        fecha_hasta = date(year, mes_final, ultimo_dia)
 
     # Obtener datos sin paginar
     cuadros = BalanceSaldosService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
     
-    # Paginar los datos
-    paginas = BalanceSaldosService.paginar(cuadros)
+    # Paginar los datos con folio inicial
+    paginas = BalanceSaldosService.paginar(cuadros, folio_inicial=folio_inicial)
     
-    return empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas
+    return empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas, folio_inicial, mes_inicio, mes_final
+
 
 
 @login_required
 def balance_saldos(request):
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
+    from .services.libro_diario_service import MESES
+    
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -2881,8 +2967,12 @@ def balance_saldos(request):
             'periodo': periodo,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
+            'mes_inicio': mes_inicio,
+            'mes_final': mes_final,
+            'folio_inicial': folio_inicial,
             'paginas': [],
             'total_meses': 0,
+            'MESES': MESES,
         })
 
     # Calcular total de páginas para mostrar en el template
@@ -2894,18 +2984,23 @@ def balance_saldos(request):
         'periodo': periodo,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
+        'mes_inicio': mes_inicio,
+        'mes_final': mes_final,
+        'folio_inicial': folio_inicial,
         'paginas': paginas,
         'total_meses': len(cuadros),
         'total_paginas': total_paginas,
         'fecha_reporte': timezone.now(),
+        'MESES': MESES,
     })
 
 
 @login_required
 def balance_saldos_excel(request):
     from decimal import Decimal
+    from openpyxl.worksheet.pagebreak import Break
 
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -2996,7 +3091,7 @@ def balance_saldos_excel(request):
     for pagina in paginas:
         # Número de página (solo si hay más de una página)
         if len(paginas) > 1:
-            merge(fila, f"Página {pagina['numero']} de {len(paginas)}",
+            merge(fila, f"Página {pagina['numero']} de {pagina['numero'] + len(paginas) - folio_inicial}",
                   Font(size=9, italic=True), PatternFill(fill_type=None), 11)
             fila += 1
 
@@ -3017,7 +3112,6 @@ def balance_saldos_excel(request):
             fila += 1
 
             # ---------- VIENEN (viene de página anterior) ----------
-            # Como una fila más dentro de la tabla, después del encabezado y antes de las cuentas
             if (pagina['vienen_debe'] != 0 or pagina['vienen_haber'] != 0) and idx == 0 and not parte['es_inicio_mes']:
                 cel(fila, 1, 'VIENEN', fuente=fnt_bold, aln=aln_left, borde_cell=borde_van_vienen)
                 cel(fila, 2, float(pagina['vienen_debe']), fuente=fnt_bold, aln=aln_right, fmt='#,##0.00', borde_cell=borde_van_vienen)
@@ -3040,8 +3134,6 @@ def balance_saldos_excel(request):
                 fila += 1
 
             # ---------- VAN (continúa en siguiente página) ----------
-            # Como una fila más dentro de la tabla, después de Sumas Iguales
-            # Solo cuando la página NO es la última Y esta parte es fin de mes
             if (pagina['van_debe'] != 0 or pagina['van_haber'] != 0) and not pagina['es_ultima'] and parte['es_fin_mes']:
                 cel(fila, 1, 'VAN', fuente=fnt_bold, aln=aln_left, borde_cell=borde_van_vienen)
                 cel(fila, 2, float(pagina['van_debe']), fuente=fnt_bold, aln=aln_right, fmt='#,##0.00', borde_cell=borde_van_vienen)
@@ -3050,7 +3142,6 @@ def balance_saldos_excel(request):
 
         # ---------- SALTO DE PÁGINA (excepto última) ----------
         if not pagina['es_ultima']:
-            from openpyxl.worksheet.pagebreak import Break
             ws.row_breaks.append(Break(id=fila))
             fila += 1
 
@@ -3078,7 +3169,7 @@ def balance_saldos_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado.')
         return redirect('balance_saldos')
 
-    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas = _get_balance_saldos_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, cuadros, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_saldos_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -3200,20 +3291,11 @@ def balance_saldos_pdf(request):
 </tr>"""
 
             # VAN (continúa en siguiente página) - SIEMPRE como última fila de la tabla
-            # Si la página NO es la última Y el mes está cortado (no es fin de mes en esta parte)
-            # O si esta parte es la última del mes pero la página tiene VAN (porque el mes continúa)
             mostrar_van = False
             if (pagina['van_debe'] != 0 or pagina['van_haber'] != 0) and not pagina['es_ultima']:
-                # Mostrar VAN si:
-                # 1. Esta parte NO es fin de mes (el mes continúa)
-                # 2. O esta parte ES fin de mes pero el VAN es de un mes que continúa desde esta página
-                #    (esto ocurre cuando un mes termina en la misma página donde empieza otro)
                 if not parte['es_fin_mes']:
                     mostrar_van = True
                 elif parte['es_fin_mes'] and idx == len(pagina['partes']) - 1:
-                    # Si es la última parte de la página y es fin de mes, 
-                    # pero la página tiene VAN (mes cortado en otra parte)
-                    # Verificar si hay alguna parte en esta página que no sea fin de mes
                     for p in pagina['partes']:
                         if not p['es_fin_mes']:
                             mostrar_van = True
@@ -3245,43 +3327,74 @@ def balance_saldos_pdf(request):
 
 # ==================== LIBRO MAYOR ====================
 def _get_libro_mayor_datos(request):
+    from calendar import monthrange
     from administracion.services.libro_mayor_service import LibroMayorService
 
     empresa_activa_id = request.session.get('empresa_activa_id')
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
-    fecha_desde = request.GET.get('fecha_desde')
-    fecha_hasta = request.GET.get('fecha_hasta')
+    # Obtener parámetros
+    mes_inicio = request.GET.get('mes_inicio')
+    mes_final = request.GET.get('mes_final')
+    folio_inicial = request.GET.get('folio_inicial', 1)
 
+    # Validar folio inicial
     try:
-        fecha_desde = datetime.strptime(fecha_desde, '%Y-%m-%d').date() if fecha_desde else periodo.fecha_inicial
-    except ValueError:
-        fecha_desde = periodo.fecha_inicial
+        folio_inicial = int(folio_inicial)
+        if folio_inicial <= 0:
+            folio_inicial = 1
+    except (ValueError, TypeError):
+        folio_inicial = 1
 
+    # Validar meses
     try:
-        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
-    except ValueError:
-        fecha_hasta = periodo.fecha_final
+        mes_inicio = int(mes_inicio) if mes_inicio else periodo.fecha_inicial.month
+        mes_final = int(mes_final) if mes_final else periodo.fecha_final.month
+    except (ValueError, TypeError):
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio > mes_final:
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio < periodo.fecha_inicial.month:
+        mes_inicio = periodo.fecha_inicial.month
+
+    if mes_final > periodo.fecha_final.month:
+        mes_final = periodo.fecha_final.month
+
+    # Construir fechas
+    year = periodo.fecha_inicial.year
+    fecha_desde = date(year, mes_inicio, 1)
+
+    if mes_final == 12:
+        fecha_hasta = date(year, mes_final, 31)
+    else:
+        ultimo_dia = monthrange(year, mes_final)[1]
+        fecha_hasta = date(year, mes_final, ultimo_dia)
 
     bloques = LibroMayorService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
-    paginas = LibroMayorService.paginar(bloques)
+    paginas = LibroMayorService.paginar(bloques, folio_inicial=folio_inicial)
 
-    return empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas
+    return empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas, folio_inicial, mes_inicio, mes_final
 
 
 @login_required
 def libro_mayor(request):
-    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+    from .services.libro_diario_service import MESES
+    
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas, folio_inicial, mes_inicio, mes_final = _get_libro_mayor_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -3308,7 +3421,7 @@ def libro_mayor(request):
         ).order_by('fecha', 'id')
         
         bloques_diario = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
-        paginas_diario = LibroDiarioService.paginar_con_van_vienen(bloques_diario)
+        paginas_diario = LibroDiarioService.paginar_con_van_vienen(bloques_diario, folio_inicial=folio_inicial)
 
 
     if not bloques:
@@ -3318,6 +3431,10 @@ def libro_mayor(request):
             'periodo': periodo,
             'fecha_desde': fecha_desde,
             'fecha_hasta': fecha_hasta,
+            'mes_inicio': mes_inicio,
+            'mes_final': mes_final,
+            'folio_inicial': folio_inicial,
+            'MESES': MESES,
         })
 
     return render(request, 'administracion/reportes/libro_mayor.html', {
@@ -3326,9 +3443,13 @@ def libro_mayor(request):
         'periodo': periodo,
         'fecha_desde': fecha_desde,
         'fecha_hasta': fecha_hasta,
+        'mes_inicio': mes_inicio,
+        'mes_final': mes_final,
+        'folio_inicial': folio_inicial,
         'paginas': paginas,
         'total_cuentas': len(bloques),
         'fecha_reporte': timezone.now(),
+        'MESES': MESES,
     })
 
 
@@ -3336,7 +3457,7 @@ def libro_mayor(request):
 def libro_mayor_excel(request):
     from decimal import Decimal
 
-    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas, folio_inicial, mes_inicio, mes_final = _get_libro_mayor_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -3408,45 +3529,58 @@ def libro_mayor_excel(request):
         Font(size=9), PatternFill(fill_type=None), 12)
     fila += 2
 
-    for bloque in bloques:
-        cuenta = bloque['cuenta']
-        nombre_cuenta = cuenta.nombre
-
-        merge_row(fila, nombre_cuenta, fnt_gold, fill_cuenta, 15); fila += 1
-
-        for c, txt in enumerate(['MES', 'DÍA', 'DIARIO FOLIO', 'NOMBRE', 'DEBE', 'HABER', 'SALDO'], 1):
-            cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_col_hdr)
-        ws.row_dimensions[fila].height = 14; fila += 1
-
-        if bloque['saldo_anterior'] != Decimal('0'):
-            cel(fila, 1, '', relleno=fill_ant)
-            cel(fila, 2, '', relleno=fill_ant)
-            cel(fila, 3, '', relleno=fill_ant)
-            cel(fila, 4, f"Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}", fuente=fnt_italica, aln=aln_left, relleno=fill_ant)
-            cel(fila, 5, '', relleno=fill_ant)
-            cel(fila, 6, '', relleno=fill_ant)
-            cel(fila, 7, float(bloque['saldo_anterior']), fuente=fnt_bold, aln=aln_right, relleno=fill_ant, fmt='#,##0.00')
+    for pagina in paginas:
+        # Mostrar número de página en el encabezado de cada página (solo si hay más de una)
+        if len(paginas) > 1:
+            merge_row(fila, f"Página {pagina['numero']} de {pagina['numero'] + len(paginas) - folio_inicial}", 
+                      Font(size=9, italic=True), PatternFill(fill_type=None), 11)
             fila += 1
 
-        for i, f_mov in enumerate(bloque['filas']):
-            rf = fill_alt if i % 2 == 1 else None
-            cel(fila, 1, f_mov['texto_mes'],   fuente=fnt_normal, aln=aln_left,   relleno=rf)
-            cel(fila, 2, f_mov['texto_dia'],   fuente=fnt_normal, aln=aln_center, relleno=rf)
-            cel(fila, 3, f_mov['correlativo'], fuente=fnt_normal, aln=aln_center, relleno=rf)
-            cel(fila, 4, f_mov['descripcion'], fuente=fnt_normal, aln=aln_left,   relleno=rf)
-            cel(fila, 5, float(f_mov['debe'])  if f_mov['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 6, float(f_mov['haber']) if f_mov['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            cel(fila, 7, float(f_mov['saldo']), fuente=fnt_bold, aln=aln_right, relleno=rf, fmt='#,##0.00')
-            fila += 1
+        for bloque in pagina['bloques']:
+            cuenta = bloque['cuenta']
+            nombre_cuenta = cuenta.nombre
 
-        cel(fila, 1, '', relleno=fill_total)
-        cel(fila, 2, '', relleno=fill_total)
-        cel(fila, 3, '', relleno=fill_total)
-        cel(fila, 4, 'TOTALES', fuente=fnt_bold, aln=aln_right, relleno=fill_total)
-        cel(fila, 5, float(bloque['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-        cel(fila, 6, float(bloque['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-        cel(fila, 7, float(bloque['saldo_final']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
-        fila += 2
+            merge_row(fila, nombre_cuenta, fnt_gold, fill_cuenta, 15); fila += 1
+
+            for c, txt in enumerate(['MES', 'DÍA', 'DIARIO FOLIO', 'NOMBRE', 'DEBE', 'HABER', 'SALDO'], 1):
+                cel(fila, c, txt, fuente=fnt_white, aln=aln_center, relleno=fill_col_hdr)
+            ws.row_dimensions[fila].height = 14; fila += 1
+
+            if bloque['saldo_anterior'] != Decimal('0'):
+                cel(fila, 1, '', relleno=fill_ant)
+                cel(fila, 2, '', relleno=fill_ant)
+                cel(fila, 3, '', relleno=fill_ant)
+                cel(fila, 4, f"Saldo anterior al {fecha_desde.strftime('%d/%m/%Y')}", fuente=fnt_italica, aln=aln_left, relleno=fill_ant)
+                cel(fila, 5, '', relleno=fill_ant)
+                cel(fila, 6, '', relleno=fill_ant)
+                cel(fila, 7, float(bloque['saldo_anterior']), fuente=fnt_bold, aln=aln_right, relleno=fill_ant, fmt='#,##0.00')
+                fila += 1
+
+            for i, f_mov in enumerate(bloque['filas']):
+                rf = fill_alt if i % 2 == 1 else None
+                cel(fila, 1, f_mov['texto_mes'],   fuente=fnt_normal, aln=aln_left,   relleno=rf)
+                cel(fila, 2, f_mov['texto_dia'],   fuente=fnt_normal, aln=aln_center, relleno=rf)
+                cel(fila, 3, f_mov['correlativo'], fuente=fnt_normal, aln=aln_center, relleno=rf)
+                cel(fila, 4, f_mov['descripcion'], fuente=fnt_normal, aln=aln_left,   relleno=rf)
+                cel(fila, 5, float(f_mov['debe'])  if f_mov['debe']  > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                cel(fila, 6, float(f_mov['haber']) if f_mov['haber'] > 0 else '', fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                cel(fila, 7, float(f_mov['saldo']), fuente=fnt_bold, aln=aln_right, relleno=rf, fmt='#,##0.00')
+                fila += 1
+
+            cel(fila, 1, '', relleno=fill_total)
+            cel(fila, 2, '', relleno=fill_total)
+            cel(fila, 3, '', relleno=fill_total)
+            cel(fila, 4, 'TOTALES', fuente=fnt_bold, aln=aln_right, relleno=fill_total)
+            cel(fila, 5, float(bloque['total_debe']),  fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+            cel(fila, 6, float(bloque['total_haber']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+            cel(fila, 7, float(bloque['saldo_final']), fuente=fnt_bold, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
+            fila += 2
+
+        # Salto de página entre páginas (excepto última)
+        if not pagina['es_ultima']:
+            from openpyxl.worksheet.pagebreak import Break
+            ws.row_breaks.append(Break(id=fila))
+            fila += 1
 
     ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
     ws.page_setup.orientation = 'landscape'
@@ -3470,7 +3604,7 @@ def libro_mayor_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado.')
         return redirect('libro_mayor')
 
-    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas = _get_libro_mayor_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, bloques, paginas, folio_inicial, mes_inicio, mes_final = _get_libro_mayor_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
@@ -3481,6 +3615,7 @@ def libro_mayor_pdf(request):
         return redirect('libro_mayor')
 
     nombre_empresa = empresa.razon_social or empresa.nombre_comercial
+    total_paginas = len(paginas)
 
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
@@ -3528,7 +3663,6 @@ def libro_mayor_pdf(request):
 
         html += f"""
 <table class="enc-tabla">
-
   <tr>
     <td class="enc-izq">
       <div class="enc-titulo">LIBRO MAYOR</div>

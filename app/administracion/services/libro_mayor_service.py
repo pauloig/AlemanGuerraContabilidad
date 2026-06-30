@@ -75,11 +75,7 @@ class LibroMayorService:
             Cuenta.objects
             .filter(id__in=cuentas_ids)
             .select_related('id_subgrupo', 'id_subgrupo__id_grupo', 'id_area_contable')
-            .order_by(
-            #    'id_area_contable__orden',
-            #    'id_subgrupo__orden',
-            #    'orden',
-            'id', )
+            .order_by('id')
         )
 
         bloques = []
@@ -131,8 +127,6 @@ class LibroMayorService:
                 saldo = calcular_saldo(saldo_acum_debe, saldo_acum_haber, tipo)
 
                 # Descripción: nombre de la cuenta contraparte
-                # Si solo hay 2 movimientos, mostrar el nombre de la cuenta contraria
-                # Si hay más, mostrar "Varios"
                 movs_asiento = list(
                     Movimiento.objects.filter(id_asiento=asiento)
                     .select_related('id_cuenta')
@@ -173,11 +167,19 @@ class LibroMayorService:
         return bloques
 
     @staticmethod
-    def paginar(bloques, lineas_por_pagina=None):
+    def paginar(bloques, lineas_por_pagina=None, folio_inicial=1):
         """
         Pagina los bloques. Cada cuenta nunca se corta entre páginas.
         Cada bloque ocupa: 1 (encabezado cuenta) + 1 (saldo anterior si existe)
                           + N filas + 1 (totales) = N+2 o N+3 líneas.
+        
+        Args:
+            bloques: Lista de bloques de cuentas
+            lineas_por_pagina: Número de líneas por página
+            folio_inicial: Número de folio inicial (default: 1)
+        
+        Returns:
+            Lista de páginas con sus bloques y números de folio
         """
         if lineas_por_pagina is None:
             lineas_por_pagina = LibroMayorService.LINEAS_POR_PAGINA
@@ -188,10 +190,12 @@ class LibroMayorService:
 
         def cerrar_pagina():
             nonlocal pagina_actual, lineas_usadas
+            numero_pagina = folio_inicial + len(paginas)
             paginas.append({
-                'numero':    len(paginas) + 1,
+                'numero':    numero_pagina,
                 'bloques':   list(pagina_actual),
                 'es_primera': len(paginas) == 0,
+                'es_ultima': False,
             })
             pagina_actual = []
             lineas_usadas = 0
@@ -208,12 +212,15 @@ class LibroMayorService:
             lineas_usadas += lineas_bloque
 
         if pagina_actual:
+            numero_pagina = folio_inicial + len(paginas)
             paginas.append({
-                'numero':     len(paginas) + 1,
+                'numero':     numero_pagina,
                 'bloques':    list(pagina_actual),
                 'es_primera': len(paginas) == 0,
+                'es_ultima': True,
             })
 
+        # Asegurar que es_ultima esté correcto
         for p in paginas:
             p['es_ultima'] = False
         if paginas:

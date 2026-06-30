@@ -114,7 +114,7 @@ class BalanceSaldosService:
         return cuadros
 
     @staticmethod
-    def paginar(cuadros, lineas_por_pagina=None):
+    def paginar(cuadros, lineas_por_pagina=None, folio_inicial=1):
         """
         Pagina los cuadros mensuales con VAN/VIENEN correctos.
         
@@ -123,29 +123,13 @@ class BalanceSaldosService:
         VIENEN: Suma acumulada de TODAS las cuentas del mes que ya se mostraron
                 en la página anterior (mismo valor que el VAN de la página anterior)
         
-        Estructura de cada página:
-        {
-            'numero': 1,
-            'partes': [
-                {
-                    'mes': 'Enero del 2026',
-                    'es_inicio_mes': True/False,
-                    'es_fin_mes': True/False,
-                    'cuentas': [...],
-                    'total_debe': Decimal,      # Solo si es fin de mes
-                    'total_haber': Decimal,     # Solo si es fin de mes
-                    'mostrar_totales': True/False,
-                    'acumulado_debe': Decimal,  # Suma acumulada HASTA esta parte
-                    'acumulado_haber': Decimal, # Suma acumulada HASTA esta parte
-                }
-            ],
-            'es_primera': True/False,
-            'es_ultima': True/False,
-            'van_debe': Decimal,      # Suma acumulada que va a la siguiente página
-            'van_haber': Decimal,     # Suma acumulada que va a la siguiente página
-            'vienen_debe': Decimal,   # Suma acumulada que viene de página anterior
-            'vienen_haber': Decimal,  # Suma acumulada que viene de página anterior
-        }
+        Args:
+            cuadros: Lista de cuadros mensuales
+            lineas_por_pagina: Número de líneas por página
+            folio_inicial: Número de folio inicial (default: 1)
+        
+        Retorna:
+            Lista de páginas con sus partes y números de folio
         """
         if lineas_por_pagina is None:
             lineas_por_pagina = BalanceSaldosService.LINEAS_POR_PAGINA
@@ -171,8 +155,11 @@ class BalanceSaldosService:
                     van_debe += cuenta['debe']
                     van_haber += cuenta['haber']
             
+            # Calcular número de página usando folio_inicial
+            numero_pagina = folio_inicial + len(paginas)
+            
             paginas.append({
-                'numero': len(paginas) + 1,
+                'numero': numero_pagina,
                 'partes': list(pagina_actual),
                 'es_primera': len(paginas) == 0,
                 'es_ultima': False,
@@ -262,8 +249,10 @@ class BalanceSaldosService:
                     van_debe += cuenta['debe']
                     van_haber += cuenta['haber']
             
+            numero_pagina = folio_inicial + len(paginas)
+            
             paginas.append({
-                'numero': len(paginas) + 1,
+                'numero': numero_pagina,
                 'partes': list(pagina_actual),
                 'es_primera': len(paginas) == 0,
                 'es_ultima': True,

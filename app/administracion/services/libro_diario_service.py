@@ -1,3 +1,5 @@
+# libro_diario_service.py
+
 from decimal import Decimal
 from administracion.models import Asiento, Movimiento
 
@@ -28,7 +30,6 @@ class LibroDiarioService:
         
         correlativo_nuevo = 0
 
-        #El order by original (fecha, correlativo) 
         for asiento in asientos.order_by('fecha', 'id'):
             mes = nombre_mes(asiento.fecha)
 
@@ -47,7 +48,6 @@ class LibroDiarioService:
             partida_actual.correlativo = correlativo_nuevo
             partida_actual.save()
 
-            #if asiento.fecha != fecha_actual:
             fecha_actual = asiento.fecha
             bloques.append({
                 'tipo':  'fecha',
@@ -58,8 +58,6 @@ class LibroDiarioService:
             movimientos = list(
                 asiento.movimientos.select_related('id_cuenta').prefetch_related('detalles')
             )
-            #debe_movs  = [m for m in movimientos if m.tipo_movimiento == 1]
-            #haber_movs = [m for m in movimientos if m.tipo_movimiento == 2]
 
             debe_movs = sorted((m for m in movimientos if m.tipo_movimiento == 1), key=lambda m: m.id)
             haber_movs = sorted((m for m in movimientos if m.tipo_movimiento == 2), key=lambda m: m.id, reverse=True)
@@ -102,14 +100,6 @@ class LibroDiarioService:
                 'debe':  Decimal('0'),
                 'haber': Decimal('0'),
             })
-
-            """bloques.append({
-                'tipo':        'asiento',
-                'correlativo': asiento.correlativo,
-                'filas':       filas,
-                'total_debe':  total_debe,
-                'total_haber': total_haber,
-            })"""
             
             bloques.append({
                 'tipo':        'asiento',
@@ -123,7 +113,18 @@ class LibroDiarioService:
         return bloques
 
     @staticmethod
-    def paginar_con_van_vienen(bloques, lineas_por_pagina=None):
+    def paginar_con_van_vienen(bloques, lineas_por_pagina=None, folio_inicial=1):
+        """
+        Pagina los bloques con VAN/VIENEN.
+        
+        Args:
+            bloques: Lista de bloques de asientos
+            lineas_por_pagina: Número de líneas por página
+            folio_inicial: Número de folio inicial (default: 1)
+        
+        Returns:
+            Lista de páginas con sus registros y números de folio
+        """
         if lineas_por_pagina is None:
             lineas_por_pagina = LibroDiarioService.LINEAS_POR_PAGINA
 
@@ -159,13 +160,10 @@ class LibroDiarioService:
         paginas       = []
         pagina_actual = []
         lineas_usadas = 0
-        # acumula solo partidas COMPLETAS a lo largo de todas las páginas
         acum_debe     = Decimal('0')
         acum_haber    = Decimal('0')
-        # acumula partidas completas dentro de la página actual
         debe_pagina   = Decimal('0')
         haber_pagina  = Decimal('0')
-        # van de la página anterior (para el VIENEN de la siguiente)
         van_debe_prev  = Decimal('0')
         van_haber_prev = Decimal('0')
         corte_prev     = False
@@ -175,14 +173,10 @@ class LibroDiarioService:
             nonlocal acum_debe, acum_haber
             nonlocal van_debe_prev, van_haber_prev, corte_prev
 
-            # Detectar si la última partida está cortada
-            # Una partida está COMPLETA cuando su última fila visible es 'comentario'
-            # Solo hay corte real cuando termina en 'movimiento' o 'detalle'
             van_debe  = Decimal('0')
             van_haber = Decimal('0')
             corte     = False
 
-            # Buscar la última fila significativa (ignorar espacio y separadores)
             ultima_significativa = None
             for fila in reversed(pagina_actual):
                 if fila['tipo'] in ('espacio', 'separador_mes', 'fecha'):
@@ -191,7 +185,6 @@ class LibroDiarioService:
                 break
 
             if ultima_significativa and ultima_significativa['tipo'] in ('movimiento', 'detalle'):
-                # Hay corte real — sumar solo MOVIMIENTOS visibles (no detalles)
                 corte = True
                 for fila in reversed(pagina_actual):
                     if fila['tipo'] in ('espacio', 'comentario'):
@@ -205,22 +198,22 @@ class LibroDiarioService:
             acum_debe  += debe_pagina
             acum_haber += haber_pagina
 
+            # Calcular número de página usando folio_inicial
+            numero_pagina = folio_inicial + len(paginas)
+
             paginas.append({
-                'numero':               len(paginas) + 1,
+                'numero':               numero_pagina,
                 'registros':            list(pagina_actual),
                 'es_primera':           len(paginas) == 0,
                 'es_ultima':            False,
                 'corte_partida':        corte,
                 'corte_partida_anterior': corte_prev,
-                # VAN = suma filas visibles de la partida cortada (solo si hay corte)
                 'van_debe':             van_debe,
                 'van_haber':            van_haber,
-                # VIENEN = VAN de la página anterior (solo si página anterior tuvo corte)
                 'vienen_debe':          van_debe_prev,
                 'vienen_haber':         van_haber_prev,
             })
 
-            # Actualizar estado para la siguiente página
             van_debe_prev  = van_debe
             van_haber_prev = van_haber
             corte_prev     = corte
@@ -235,12 +228,10 @@ class LibroDiarioService:
             fila = filas_planas[i]
             tipo = fila['tipo']
 
-            # Acumular total de partidas completas al encontrar su fila espacio
             if fila.get('_es_ultima_de_asiento'):
                 debe_pagina  += fila['_asiento_debe']
                 haber_pagina += fila['_asiento_haber']
 
-            # Salto de página
             if tipo in ('separador_mes', 'fecha'):
                 if lineas_por_pagina - lineas_usadas <= 2 and lineas_usadas > 0:
                     cerrar_pagina()
@@ -248,7 +239,8 @@ class LibroDiarioService:
                 cerrar_pagina()
                 
             if fila.get('correlativo') is not None and fila.get('asiento_id') is not None:
-                Asiento.objects.filter(id=fila['asiento_id']).update(folio=len(paginas) + 1)
+                # Actualizar folio del asiento con el número de página actual + 1 (próxima página)
+                Asiento.objects.filter(id=fila['asiento_id']).update(folio=len(paginas) + folio_inicial)
 
             pagina_actual.append(fila)
             lineas_usadas += 1
@@ -258,8 +250,11 @@ class LibroDiarioService:
         if pagina_actual:
             acum_debe  += debe_pagina
             acum_haber += haber_pagina
+            
+            numero_pagina = folio_inicial + len(paginas)
+            
             paginas.append({
-                'numero':               len(paginas) + 1,
+                'numero':               numero_pagina,
                 'registros':            list(pagina_actual),
                 'es_primera':           len(paginas) == 0,
                 'es_ultima':            True,

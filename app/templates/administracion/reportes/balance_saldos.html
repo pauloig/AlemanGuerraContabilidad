@@ -159,32 +159,46 @@
                 </div>
                 <div class="col-md-2">
                     <div class="filter-group">
-                        <label><i class="fas fa-calendar-day"></i> Fecha Desde</label>
-                        <input type="date" name="fecha_desde" class="filter-control" value="{{ fecha_desde|date:'Y-m-d' }}">
+                        <label><i class="fas fa-calendar-alt"></i> Mes Inicio</label>
+                        <select name="mes_inicio" class="filter-control">
+                            {% for num, nombre in MESES.items %}
+                            <option value="{{ num }}" {% if mes_inicio == num %}selected{% endif %}>{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
                 <div class="col-md-2">
                     <div class="filter-group">
-                        <label><i class="fas fa-calendar-day"></i> Fecha Hasta</label>
-                        <input type="date" name="fecha_hasta" class="filter-control" value="{{ fecha_hasta|date:'Y-m-d' }}">
+                        <label><i class="fas fa-calendar-alt"></i> Mes Final</label>
+                        <select name="mes_final" class="filter-control">
+                            {% for num, nombre in MESES.items %}
+                            <option value="{{ num }}" {% if mes_final == num %}selected{% endif %}>{{ nombre }}</option>
+                            {% endfor %}
+                        </select>
                     </div>
                 </div>
                 <div class="col-md-2">
-                    <div class="filter-group" style="padding-top:20px;">
-                        <button type="submit" class="btn-filter">
-                            <i class="fas fa-search"></i> Aplicar Filtros
-                        </button>
+                    <div class="filter-group">
+                        <label><i class="fas fa-hashtag"></i> Folio Inicial</label>
+                        <input type="number" name="folio_inicial" class="filter-control" value="{{ folio_inicial|default:1 }}" min="1" step="1">
                     </div>
                 </div>
             </div>
             <div class="row mt-2">
+                <div class="col-md-12">
+                    <button type="submit" class="btn-filter" style="width:auto;padding:8px 30px;">
+                        <i class="fas fa-search"></i> Aplicar Filtros
+                    </button>
+                </div>
+            </div>
+            <div class="row mt-2">
                 <div class="col-md-12 text-right">
-                    <a href="{% url 'balance_saldos_excel' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                    <a href="{% url 'balance_saldos_excel' %}?mes_inicio={{ mes_inicio }}&mes_final={{ mes_final }}&folio_inicial={{ folio_inicial }}"
                        class="btn-export" style="background:#1e7e34;margin-right:8px;"
                        onclick="mostrarSpinner('Generando Excel...')">
                         <i class="fas fa-file-excel"></i> Excel
                     </a>
-                    <a href="{% url 'balance_saldos_pdf' %}?fecha_desde={{ fecha_desde|date:'Y-m-d' }}&fecha_hasta={{ fecha_hasta|date:'Y-m-d' }}"
+                    <a href="{% url 'balance_saldos_pdf' %}?mes_inicio={{ mes_inicio }}&mes_final={{ mes_final }}&folio_inicial={{ folio_inicial }}"
                        class="btn-export" style="background:#b91c1c;"
                        onclick="mostrarSpinner('Generando PDF...')">
                         <i class="fas fa-print"></i> Imprimir
@@ -206,7 +220,8 @@
         <i class="fas fa-info-circle"></i>
         Reporte generado el {{ fecha_reporte|date:"d/m/Y H:i" }} &nbsp;|&nbsp;
         {{ total_meses }} mes(es) &nbsp;|&nbsp;
-        {{ total_paginas }} página(s)
+        {{ total_paginas }} página(s) &nbsp;|&nbsp;
+        Folio inicial: <strong>{{ folio_inicial }}</strong>
     </div>
 
     {% for pagina in paginas %}
