@@ -119,17 +119,10 @@ class BalanceSaldosService:
         Pagina los cuadros mensuales con VAN/VIENEN correctos.
         
         VAN: Suma acumulada de TODAS las cuentas del mes que ya se mostraron
-             en la página actual (Debe y Haber)
+             en la página actual (Debe y Haber) - SOLO DEL MES ACTUAL
         VIENEN: Suma acumulada de TODAS las cuentas del mes que ya se mostraron
                 en la página anterior (mismo valor que el VAN de la página anterior)
-        
-        Args:
-            cuadros: Lista de cuadros mensuales
-            lineas_por_pagina: Número de líneas por página
-            folio_inicial: Número de folio inicial (default: 1)
-        
-        Retorna:
-            Lista de páginas con sus partes y números de folio
+                - SOLO DEL MES ACTUAL
         """
         if lineas_por_pagina is None:
             lineas_por_pagina = BalanceSaldosService.LINEAS_POR_PAGINA
@@ -138,22 +131,29 @@ class BalanceSaldosService:
         pagina_actual = []
         lineas_usadas = 0
         
-        # Variables para VAN/VIENEN
+        # Variables para VAN/VIENEN por MES
+        # Estas se reinician cuando cambia de mes
+        mes_actual = None
         vienen_debe = Decimal('0')
         vienen_haber = Decimal('0')
+        acumulado_debe_mes = Decimal('0')
+        acumulado_haber_mes = Decimal('0')
 
         def cerrar_pagina():
             nonlocal pagina_actual, lineas_usadas, vienen_debe, vienen_haber
             
             # Calcular VAN (suma acumulada de todas las cuentas de esta página)
+            # SOLO del mes actual, no de toda la página
             van_debe = Decimal('0')
             van_haber = Decimal('0')
             
             # Si la página tiene contenido, calcular el acumulado de todas las cuentas
+            # pero solo del mes actual (mes_actual)
             for parte in pagina_actual:
-                for cuenta in parte['cuentas']:
-                    van_debe += cuenta['debe']
-                    van_haber += cuenta['haber']
+                if parte['mes'] == mes_actual:
+                    for cuenta in parte['cuentas']:
+                        van_debe += cuenta['debe']
+                        van_haber += cuenta['haber']
             
             # Calcular número de página usando folio_inicial
             numero_pagina = folio_inicial + len(paginas)
@@ -169,7 +169,7 @@ class BalanceSaldosService:
                 'vienen_haber': vienen_haber,
             })
             
-            # Actualizar VIENEN para la siguiente página
+            # Actualizar VIENEN para la siguiente página (solo del mes actual)
             vienen_debe = van_debe
             vienen_haber = van_haber
             
@@ -183,12 +183,16 @@ class BalanceSaldosService:
             total_haber = cuadro['total_haber']
             cuadrado = cuadro['cuadrado']
             
+            # 🔴 NUEVO MES: Reiniciar acumuladores
+            if mes != mes_actual:
+                mes_actual = mes
+                vienen_debe = Decimal('0')
+                vienen_haber = Decimal('0')
+                acumulado_debe_mes = Decimal('0')
+                acumulado_haber_mes = Decimal('0')
+            
             num_cuentas = len(cuentas)
             indice_inicio = 0
-            
-            # 🔴 IMPORTANTE: Reiniciar acumuladores para el NUEVO mes
-            acumulado_debe = Decimal('0')
-            acumulado_haber = Decimal('0')
             
             while indice_inicio < num_cuentas:
                 lineas_fijas = 4
@@ -206,10 +210,10 @@ class BalanceSaldosService:
                 
                 cuentas_slice = cuentas[indice_inicio:indice_inicio + cuentas_para_esta_parte]
                 
-                # Acumular sumas de esta parte (solo del mes actual)
+                # Acumular sumas de esta parte (del mes actual)
                 for cuenta in cuentas_slice:
-                    acumulado_debe += cuenta['debe']
-                    acumulado_haber += cuenta['haber']
+                    acumulado_debe_mes += cuenta['debe']
+                    acumulado_haber_mes += cuenta['haber']
                 
                 indice_inicio += cuentas_para_esta_parte
                 es_fin_mes = (indice_inicio >= num_cuentas)
@@ -223,8 +227,8 @@ class BalanceSaldosService:
                     'total_haber': total_haber if es_fin_mes else Decimal('0'),
                     'cuadrado': cuadrado if es_fin_mes else False,
                     'mostrar_totales': es_fin_mes,
-                    'acumulado_debe': acumulado_debe,
-                    'acumulado_haber': acumulado_haber,
+                    'acumulado_debe': acumulado_debe_mes,
+                    'acumulado_haber': acumulado_haber_mes,
                 }
                 
                 pagina_actual.append(parte)
@@ -241,13 +245,14 @@ class BalanceSaldosService:
                     cerrar_pagina()
 
         if pagina_actual:
-            # Calcular VAN para la última página
+            # Calcular VAN para la última página (solo del mes actual)
             van_debe = Decimal('0')
             van_haber = Decimal('0')
             for parte in pagina_actual:
-                for cuenta in parte['cuentas']:
-                    van_debe += cuenta['debe']
-                    van_haber += cuenta['haber']
+                if parte['mes'] == mes_actual:
+                    for cuenta in parte['cuentas']:
+                        van_debe += cuenta['debe']
+                        van_haber += cuenta['haber']
             
             numero_pagina = folio_inicial + len(paginas)
             
