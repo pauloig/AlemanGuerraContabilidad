@@ -186,7 +186,7 @@ class BalanceSaldosService:
             num_cuentas = len(cuentas)
             indice_inicio = 0
             
-            # Variable para acumular dentro del mes
+            # 🔴 IMPORTANTE: Reiniciar acumuladores para el NUEVO mes
             acumulado_debe = Decimal('0')
             acumulado_haber = Decimal('0')
             
@@ -206,7 +206,7 @@ class BalanceSaldosService:
                 
                 cuentas_slice = cuentas[indice_inicio:indice_inicio + cuentas_para_esta_parte]
                 
-                # Acumular sumas de esta parte
+                # Acumular sumas de esta parte (solo del mes actual)
                 for cuenta in cuentas_slice:
                     acumulado_debe += cuenta['debe']
                     acumulado_haber += cuenta['haber']
