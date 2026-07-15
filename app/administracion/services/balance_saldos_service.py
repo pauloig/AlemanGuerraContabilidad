@@ -1,8 +1,8 @@
 from decimal import Decimal
 from django.db.models import Sum, Q
 from collections import defaultdict
-
-from administracion.services.libro_mayor_service import tipo_saldo_cuenta
+from datetime import date
+from calendar import monthrange
 
 MESES = {
     1: 'Enero', 2: 'Febrero', 3: 'Marzo', 4: 'Abril',
@@ -19,29 +19,31 @@ class BalanceSaldosService:
     def get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta):
         """
         Retorna una lista de cuadros, uno por mes en el rango.
-        Cada cuadro:
-        {
-            'mes': str  (ej: 'Enero del 2026'),
-            'cuentas': [
-                {
-                    'nombre': str,
-                    'debe': Decimal,    # Saldo neto (si es positivo)
-                    'haber': Decimal,   # Saldo neto (si es negativo)
-                }
-            ],
-            'total_debe': Decimal,      # Suma de todos los saldos netos positivos
-            'total_haber': Decimal,     # Suma de todos los saldos netos negativos
-            'cuadrado': bool,
-        }
+        
+        LÓGICA CORREGIDA:
+        1. Cada cuenta tiene un saldo acumulado que se arrastra mes a mes
+        2. El saldo se almacena como valor NETO (positivo = DEUDOR, negativo = ACREEDOR)
+        3. Se muestran TODAS las cuentas que tienen saldo acumulado
+        4. Los saldos se muestran en DEBE o HABER según su signo
+        
+        IMPORTANTE: NO se usa el área contable para determinar la naturaleza.
+        El saldo de la cuenta se calcula sumando TODOS los débitos y créditos
+        desde el inicio del período, y el signo del resultado determina
+        si va en DEBE o HABER.
         """
         from administracion.models import Movimiento, Asiento, Cuenta
 
+        # Obtener la fecha de inicio del período
+        fecha_inicio_periodo = empresa_periodo.id_periodo.fecha_inicial
+
+        # Obtener asientos en el rango
         asientos_rango = Asiento.objects.filter(
             id_empresa_periodo=empresa_periodo,
             estatus__in=[1, True],
             fecha__range=[fecha_desde, fecha_hasta]
         ).order_by('fecha')
 
+        # Agrupar asientos por mes
         meses_dict = defaultdict(list)
         for asiento in asientos_rango:
             clave = (asiento.fecha.year, asiento.fecha.month)
@@ -49,20 +51,38 @@ class BalanceSaldosService:
 
         cuadros = []
 
+        # Variable para acumular saldos por cuenta (se arrastra entre meses)
+        # Guardamos el saldo neto de cada cuenta como un solo valor
+        # (positivo = saldo deudor, negativo = saldo acreedor)
+        saldos_acumulados = defaultdict(lambda: Decimal('0'))
+
         for (año, mes_num) in sorted(meses_dict.keys()):
             asiento_ids = meses_dict[(año, mes_num)]
             asientos_mes = Asiento.objects.filter(id__in=asiento_ids)
 
-            cuentas_ids = (
+            # Obtener la fecha de fin del mes para obtener todas las cuentas del período
+            if mes_num == 12:
+                fecha_fin_mes = date(año, mes_num, 31)
+            else:
+                ultimo_dia = monthrange(año, mes_num)[1]
+                fecha_fin_mes = date(año, mes_num, ultimo_dia)
+
+            # Obtener TODAS las cuentas que han tenido movimiento 
+            # desde el inicio del período hasta el final del mes actual
+            cuentas_ids_periodo = (
                 Movimiento.objects
-                .filter(id_asiento__in=asientos_mes)
+                .filter(
+                    id_asiento__id_empresa_periodo=empresa_periodo,
+                    id_asiento__estatus__in=[1, True],
+                    id_asiento__fecha__range=[fecha_inicio_periodo, fecha_fin_mes]
+                )
                 .values_list('id_cuenta_id', flat=True)
                 .distinct()
             )
 
             cuentas = (
                 Cuenta.objects
-                .filter(id__in=cuentas_ids)
+                .filter(id__in=cuentas_ids_periodo)
                 .select_related('id_subgrupo', 'id_area_contable')
                 .order_by('nombre')
             )
@@ -72,18 +92,38 @@ class BalanceSaldosService:
             total_haber = Decimal('0')
 
             for cuenta in cuentas:
-                totales = Movimiento.objects.filter(
+                # 1. Obtener el saldo acumulado del mes anterior (se arrastra)
+                # Este es un valor neto: positivo = deudor, negativo = acreedor
+                saldo_anterior = saldos_acumulados.get(cuenta.id, Decimal('0'))
+
+                # 2. Calcular MOVIMIENTOS del mes (Débitos y Créditos REALES)
+                totales_mes = Movimiento.objects.filter(
                     id_cuenta=cuenta,
                     id_asiento__in=asientos_mes,
                 ).aggregate(
                     debe=Sum('monto', filter=Q(tipo_movimiento=1)),
                     haber=Sum('monto', filter=Q(tipo_movimiento=2)),
                 )
-                
-                debe_raw = totales['debe'] or Decimal('0')
-                haber_raw = totales['haber'] or Decimal('0')
-                saldo_neto = debe_raw - haber_raw
+                debe_mes = totales_mes['debe'] or Decimal('0')
+                haber_mes = totales_mes['haber'] or Decimal('0')
 
+                # 3. 🔴 CAMBIO IMPORTANTE:
+                # Calcular el saldo neto de la cuenta usando TODOS los movimientos
+                # desde el inicio del período hasta el mes actual.
+                # Esto evita tener que saber si la cuenta es deudora o acreedora.
+                # Simplemente sumamos todos los débitos y todos los créditos,
+                # y el signo del resultado nos dice si es deudor o acreedor.
+                
+                # Calcular saldo neto como: (Total Débitos - Total Créditos)
+                # Si el resultado es positivo → la cuenta tiene saldo DEUDOR
+                # Si el resultado es negativo → la cuenta tiene saldo ACREEDOR
+                saldo_neto = saldo_anterior + debe_mes - haber_mes
+
+                # 4. Guardar el saldo acumulado para el siguiente mes
+                saldos_acumulados[cuenta.id] = saldo_neto
+
+                # 5. Mostrar el saldo en la columna correspondiente (3 columnas)
+                # Si el saldo neto es positivo, va en DEBE; si es negativo, va en HABER
                 if saldo_neto > 0:
                     debe = saldo_neto
                     haber = Decimal('0')
@@ -94,14 +134,15 @@ class BalanceSaldosService:
                     debe = Decimal('0')
                     haber = Decimal('0')
 
-                total_debe += debe
-                total_haber += haber
-
+                # Mostrar TODAS las cuentas que tengan saldo acumulado
                 filas.append({
                     'nombre': cuenta.nombre,
                     'debe': debe,
                     'haber': haber,
                 })
+
+                total_debe += debe
+                total_haber += haber
 
             cuadros.append({
                 'mes': f"{MESES[mes_num]} del {año}",
@@ -119,10 +160,9 @@ class BalanceSaldosService:
         Pagina los cuadros mensuales con VAN/VIENEN correctos.
         
         VAN: Suma acumulada de TODAS las cuentas del mes que ya se mostraron
-             en la página actual (Debe y Haber) - SOLO DEL MES ACTUAL
+             en la página actual (Debe y Haber)
         VIENEN: Suma acumulada de TODAS las cuentas del mes que ya se mostraron
                 en la página anterior (mismo valor que el VAN de la página anterior)
-                - SOLO DEL MES ACTUAL
         """
         if lineas_por_pagina is None:
             lineas_por_pagina = BalanceSaldosService.LINEAS_POR_PAGINA
@@ -132,7 +172,6 @@ class BalanceSaldosService:
         lineas_usadas = 0
         
         # Variables para VAN/VIENEN por MES
-        # Estas se reinician cuando cambia de mes
         mes_actual = None
         vienen_debe = Decimal('0')
         vienen_haber = Decimal('0')
@@ -143,19 +182,16 @@ class BalanceSaldosService:
             nonlocal pagina_actual, lineas_usadas, vienen_debe, vienen_haber
             
             # Calcular VAN (suma acumulada de todas las cuentas de esta página)
-            # SOLO del mes actual, no de toda la página
             van_debe = Decimal('0')
             van_haber = Decimal('0')
             
-            # Si la página tiene contenido, calcular el acumulado de todas las cuentas
-            # pero solo del mes actual (mes_actual)
+            # Solo del mes actual
             for parte in pagina_actual:
                 if parte['mes'] == mes_actual:
                     for cuenta in parte['cuentas']:
                         van_debe += cuenta['debe']
                         van_haber += cuenta['haber']
             
-            # Calcular número de página usando folio_inicial
             numero_pagina = folio_inicial + len(paginas)
             
             paginas.append({
@@ -169,7 +205,6 @@ class BalanceSaldosService:
                 'vienen_haber': vienen_haber,
             })
             
-            # Actualizar VIENEN para la siguiente página (solo del mes actual)
             vienen_debe = van_debe
             vienen_haber = van_haber
             
@@ -183,7 +218,7 @@ class BalanceSaldosService:
             total_haber = cuadro['total_haber']
             cuadrado = cuadro['cuadrado']
             
-            # 🔴 NUEVO MES: Reiniciar acumuladores
+            # Nuevo mes: Reiniciar acumuladores
             if mes != mes_actual:
                 mes_actual = mes
                 vienen_debe = Decimal('0')
@@ -195,7 +230,7 @@ class BalanceSaldosService:
             indice_inicio = 0
             
             while indice_inicio < num_cuentas:
-                lineas_fijas = 4
+                lineas_fijas = 4  # título + encabezado + totales + separador
                 es_inicio_mes = (indice_inicio == 0)
                 
                 espacio_disponible = lineas_por_pagina - lineas_usadas - lineas_fijas
@@ -210,7 +245,7 @@ class BalanceSaldosService:
                 
                 cuentas_slice = cuentas[indice_inicio:indice_inicio + cuentas_para_esta_parte]
                 
-                # Acumular sumas de esta parte (del mes actual)
+                # Acumular sumas de esta parte (solo del mes actual)
                 for cuenta in cuentas_slice:
                     acumulado_debe_mes += cuenta['debe']
                     acumulado_haber_mes += cuenta['haber']
@@ -235,9 +270,9 @@ class BalanceSaldosService:
                 
                 lineas_parte = len(cuentas_slice)
                 if es_inicio_mes:
-                    lineas_parte += 2
+                    lineas_parte += 2  # título + encabezado
                 if es_fin_mes:
-                    lineas_parte += 2
+                    lineas_parte += 2  # totales + separador
                 
                 lineas_usadas += lineas_parte
                 
@@ -245,7 +280,6 @@ class BalanceSaldosService:
                     cerrar_pagina()
 
         if pagina_actual:
-            # Calcular VAN para la última página (solo del mes actual)
             van_debe = Decimal('0')
             van_haber = Decimal('0')
             for parte in pagina_actual:
