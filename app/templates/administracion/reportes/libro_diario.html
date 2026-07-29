@@ -50,6 +50,11 @@
     .col-debe     { width: 115px; text-align: right; font-family: monospace; }
     .col-haber    { width: 115px; text-align: right; font-family: monospace; }
 
+    /* 🔴 NUEVO: Borde inferior para el último detalle en la columna AUXILIAR */
+    tr.detalle-row.ultimo-detalle td.col-auxiliar {
+        border-bottom: 1.5px solid #000;
+    }
+
     tr.separador-mes-row td {
         background: #d1d5db;
         color: #0A1628;
@@ -235,7 +240,8 @@
         tr.fecha-row td,
         tr.van-row td, tr.vienen-row td,
         tr.comentario-row td,
-        tr.detalle-row td.col-cuenta {
+        tr.detalle-row td.col-cuenta,
+        tr.detalle-row.ultimo-detalle td.col-auxiliar {
             -webkit-print-color-adjust: exact;
             print-color-adjust: exact;
         }
@@ -402,7 +408,7 @@
                         </tr>
 
                         {% elif reg.tipo == 'detalle' %}
-                        <tr class="detalle-row">
+                        <tr class="detalle-row {% if reg.es_ultimo_detalle %}ultimo-detalle{% endif %}">
                             <td class="col-partida"></td>
                             <td class="col-cuenta">{{ reg.cuenta_nombre }}</td>
                             <td class="col-auxiliar">{% if reg.debe > 0 %}{{ reg.debe|monto }}{% elif reg.haber > 0 %}{{ reg.haber|monto }}{% endif %}</td>

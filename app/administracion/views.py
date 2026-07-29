@@ -1862,7 +1862,7 @@ def libro_diario_excel(request):
     ws = wb.active
     ws.title = "Libro Diario"
 
-    # Estilos (igual que antes)
+    # Estilos
     fnt_titulo   = Font(bold=True, size=13)
     fnt_bold     = Font(bold=True, size=10)
     fnt_normal   = Font(size=10)
@@ -1884,6 +1884,11 @@ def libro_diario_excel(request):
     borde_grueso_bot = Border(
         left=Side(style='thin'), right=Side(style='thin'),
         top=Side(style='thin'),  bottom=Side(style='medium')
+    )
+    # 🔴 NUEVO: Borde para el último detalle (borde inferior grueso)
+    borde_detalle_ultimo = Border(
+        left=Side(style='thin'), right=Side(style='thin'),
+        top=Side(style='thin'), bottom=Side(style='medium')
     )
 
     fill_header   = PatternFill(start_color='1B2B4E', end_color='1B2B4E', fill_type='solid')
@@ -1977,10 +1982,16 @@ def libro_diario_excel(request):
                 fila += 1
 
             elif tipo == 'detalle':
-                celda(fila, 1, '', bordes=borde, relleno=fill_detalle)
-                celda(fila, 2, f'  {reg["cuenta_nombre"]}', fuente=fnt_detalle, alineacion=aln_left, relleno=fill_detalle, bordes=borde)
-                celda(fila, 3, float(reg['debe'])  if reg['debe']  > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde, formato='#,##0.00')
-                celda(fila, 4, float(reg['haber']) if reg['haber'] > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde, formato='#,##0.00')
+                # 🔴 NUEVO: Verificar si es el último detalle para aplicar borde inferior
+                es_ultimo_detalle = reg.get('es_ultimo_detalle', False)
+                borde_detalle = borde
+                if es_ultimo_detalle:
+                    borde_detalle = borde_detalle_ultimo
+                
+                celda(fila, 1, '', bordes=borde_detalle, relleno=fill_detalle)
+                celda(fila, 2, f'  {reg["cuenta_nombre"]}', fuente=fnt_detalle, alineacion=aln_left, relleno=fill_detalle, bordes=borde_detalle)
+                celda(fila, 3, float(reg['debe'])  if reg['debe']  > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde_detalle, formato='#,##0.00')
+                celda(fila, 4, float(reg['haber']) if reg['haber'] > 0 else '', fuente=fnt_detalle, alineacion=aln_right, relleno=fill_detalle, bordes=borde_detalle, formato='#,##0.00')
                 fila += 1
 
             elif tipo == 'comentario':
@@ -2039,7 +2050,6 @@ def libro_diario_pdf(request):
     datos = LibroDiarioService.get_datos_reporte(asientos, fecha_desde, fecha_hasta, empresa.razon_social, periodo.nombre)
     paginas = LibroDiarioService.paginar_con_van_vienen(datos, lineas_por_pagina=None, folio_inicial=folio_inicial)
 
-
     total_debe_general = sum(b['total_debe'] for b in datos if b['tipo'] == 'asiento')
     total_haber_general = sum(b['total_haber'] for b in datos if b['tipo'] == 'asiento')
 
@@ -2082,6 +2092,10 @@ def libro_diario_pdf(request):
   .row-fecha td {{ background-color: #D1D5DB; font-weight: bold; text-align: center;
                    padding: 1px 4px; border: 0.5pt solid #94a3b8; line-height: 1.2; }}
   .row-detalle td {{ font-style: italic; color: #444; padding-left: 14pt; }}
+  /* 🔴 NUEVO: Borde inferior para el último detalle en la columna AUXILIAR */
+  .row-detalle.ultimo-detalle td.col-auxiliar {{
+      border-bottom: 1.5pt solid #000;
+  }}
   .row-comentario td {{ background-color: #EEF2F7; font-style: italic;
                         border-top: 0.8pt solid #000; border-bottom: 1pt solid #000; }}
   .row-comentario .col-monto, .row-comentario .col-auxiliar {{ font-weight: bold; font-style: normal; }}
@@ -2156,8 +2170,14 @@ def libro_diario_pdf(request):
 </tr>"""
 
             elif tipo == 'detalle':
+                # 🔴 NUEVO: Verificar si es el último detalle para agregar clase
+                es_ultimo_detalle = reg.get('es_ultimo_detalle', False)
+                cls_detalle = 'row-detalle'
+                if es_ultimo_detalle:
+                    cls_detalle = 'row-detalle ultimo-detalle'
+                
                 aux = f"{reg['debe']:,.2f}" if reg['debe'] > 0 else f"{reg['haber']:,.2f}" if reg['haber'] > 0 else ''
-                html += f"""<tr class="row-detalle">
+                html += f"""<tr class="{cls_detalle}">
   <td class="col-partida"></td>
   <td class="col-cuenta">{reg['cuenta_nombre']}</td>
   <td class="col-auxiliar">{aux}</td>
@@ -2486,77 +2506,132 @@ def estado_resultados_pdf(request):
 # ==================== BALANCE GENERAL ====================
 
 def _get_balance_general_datos(request):
+    from calendar import monthrange
     from administracion.services.balance_general_service import BalanceGeneralService
 
     empresa_activa_id = request.session.get('empresa_activa_id')
     empresa_periodo_activo_id = request.session.get('empresa_periodo_activo_id')
 
     if not empresa_activa_id or not empresa_periodo_activo_id:
-        return None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
     try:
         empresa = Empresa.objects.get(id=empresa_activa_id)
         empresa_periodo = EmpresaPeriodo.objects.select_related('id_periodo').get(id=empresa_periodo_activo_id)
         periodo = empresa_periodo.id_periodo
     except (Empresa.DoesNotExist, EmpresaPeriodo.DoesNotExist):
-        return None, None, None, None
+        return None, None, None, None, None, None, None, None, None
 
-    fecha_hasta = request.GET.get('fecha_hasta')
+    # Obtener parámetros
+    mes_inicio = request.GET.get('mes_inicio')
+    mes_final = request.GET.get('mes_final')
+    folio_inicial = request.GET.get('folio_inicial', 1)
+
+    # Validar folio inicial
     try:
-        fecha_hasta = datetime.strptime(fecha_hasta, '%Y-%m-%d').date() if fecha_hasta else periodo.fecha_final
-    except ValueError:
-        fecha_hasta = periodo.fecha_final
+        folio_inicial = int(folio_inicial)
+        if folio_inicial <= 0:
+            folio_inicial = 1
+    except (ValueError, TypeError):
+        folio_inicial = 1
 
-    datos = BalanceGeneralService.get_datos_reporte(empresa_periodo, fecha_hasta)
-    return empresa, periodo, fecha_hasta, datos
+    # Validar meses
+    try:
+        mes_inicio = int(mes_inicio) if mes_inicio else periodo.fecha_inicial.month
+        mes_final = int(mes_final) if mes_final else periodo.fecha_final.month
+    except (ValueError, TypeError):
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio > mes_final:
+        mes_inicio = periodo.fecha_inicial.month
+        mes_final = periodo.fecha_final.month
+
+    if mes_inicio < periodo.fecha_inicial.month:
+        mes_inicio = periodo.fecha_inicial.month
+
+    if mes_final > periodo.fecha_final.month:
+        mes_final = periodo.fecha_final.month
+
+    # Construir fechas
+    year = periodo.fecha_inicial.year
+    fecha_desde = date(year, mes_inicio, 1)
+
+    if mes_final == 12:
+        fecha_hasta = date(year, mes_final, 31)
+    else:
+        ultimo_dia = monthrange(year, mes_final)[1]
+        fecha_hasta = date(year, mes_final, ultimo_dia)
+
+    # Obtener datos
+    datos = BalanceGeneralService.get_datos_reporte(empresa_periodo, fecha_desde, fecha_hasta)
+    paginas = BalanceGeneralService.paginar(datos, folio_inicial=folio_inicial)
+
+    return empresa, periodo, fecha_desde, fecha_hasta, datos, paginas, folio_inicial, mes_inicio, mes_final
 
 
 @login_required
 def balance_general(request):
-    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+    from .services.libro_diario_service import MESES
+
+    empresa, periodo, fecha_desde, fecha_hasta, datos, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_general_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
-    sin_datos = (
-        not datos['activo']['grupos'] and
-        not datos['pasivo']['grupos'] and
-        not datos['capital']['grupos'] and
-        datos['capital']['utilidad_ejercicio'] == 0
-    )
-
-    from decimal import Decimal
-    diferencia = abs(datos['activo']['total'] - datos['total_pasivo_capital'])
+    if not datos:
+        return render(request, 'administracion/reportes/balance_general.html', {
+            'sin_datos': True,
+            'empresa': empresa,
+            'periodo': periodo,
+            'fecha_desde': fecha_desde,
+            'fecha_hasta': fecha_hasta,
+            'mes_inicio': mes_inicio,
+            'mes_final': mes_final,
+            'folio_inicial': folio_inicial,
+            'MESES': MESES,
+        })
 
     return render(request, 'administracion/reportes/balance_general.html', {
-        'sin_datos':    sin_datos,
-        'empresa':      empresa,
-        'periodo':      periodo,
-        'fecha_hasta':  fecha_hasta,
-        'datos':        datos,
-        'diferencia':   diferencia,
-        'fecha_reporte': timezone.now(),
+        'sin_datos': False,
+        'empresa': empresa,
+        'periodo': periodo,
+        'fecha_desde': fecha_desde,
+        'fecha_hasta': fecha_hasta,
+        'mes_inicio': mes_inicio,
+        'mes_final': mes_final,
+        'folio_inicial': folio_inicial,
+        'datos': datos,
+        'paginas': paginas,
+        'MESES': MESES,
     })
 
 
 @login_required
 def balance_general_excel(request):
     from decimal import Decimal
+    from openpyxl.worksheet.pagebreak import Break
 
-    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, datos, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_general_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
 
+    if not datos:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('balance_general')
+
     wb = Workbook()
     ws = wb.active
     ws.title = "Balance General"
 
+    # ==================== ESTILOS ====================
     fnt_titulo = Font(bold=True, size=13)
     fnt_bold   = Font(bold=True, size=10)
     fnt_normal = Font(size=10)
+    fnt_white  = Font(bold=True, size=10, color='FFFFFF')
 
     aln_center = Alignment(horizontal='center', vertical='center')
     aln_right  = Alignment(horizontal='right',  vertical='center')
@@ -2576,9 +2651,8 @@ def balance_general_excel(request):
     fill_util    = PatternFill(start_color='D1FAE5', end_color='D1FAE5', fill_type='solid')
     fill_perd    = PatternFill(start_color='FEE2E2', end_color='FEE2E2', fill_type='solid')
 
-    fnt_white     = Font(bold=True, size=10, color='FFFFFF')
-    fnt_util      = Font(bold=True, size=10, color='065F46')
-    fnt_perd      = Font(bold=True, size=10, color='991B1B')
+    fnt_util = Font(bold=True, size=10, color='065F46')
+    fnt_perd = Font(bold=True, size=10, color='991B1B')
 
     # Columnas: A-B = Activo, C vacía, D-E = Pasivo+Capital
     ws.column_dimensions['A'].width = 38
@@ -2587,60 +2661,58 @@ def balance_general_excel(request):
     ws.column_dimensions['D'].width = 38
     ws.column_dimensions['E'].width = 16
 
-    nombre_empresa = empresa.nombre_comercial or empresa.razon_social
+    nombre_empresa = empresa.razon_social or empresa.nombre_comercial
     fila = 1
 
-    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None, merge_end=None):
-        if merge_end:
-            ws.merge_cells(start_row=r, start_column=c, end_row=r, end_column=merge_end)
+    def cel(r, c, val='', fuente=None, aln=None, relleno=None, fmt=None):
         cl = ws.cell(row=r, column=c, value=val)
-        if fuente:  cl.font      = fuente
+        if fuente:  cl.font = fuente
         if aln:     cl.alignment = aln
-        if relleno: cl.fill      = relleno
+        if relleno: cl.fill = relleno
         if fmt:     cl.number_format = fmt
         cl.border = borde
         return cl
 
+    def merge(r, c_ini, c_fin, val, fuente, relleno, altura=14):
+        ws.merge_cells(start_row=r, start_column=c_ini, end_row=r, end_column=c_fin)
+        cl = ws.cell(row=r, column=c_ini, value=val)
+        cl.font = fuente
+        cl.alignment = aln_center
+        cl.fill = relleno
+        for col in range(c_ini, c_fin + 1):
+            ws.cell(row=r, column=col).border = borde
+        ws.row_dimensions[r].height = altura
+
     def encabezado_col(r, col_ini, titulo):
         ws.merge_cells(start_row=r, start_column=col_ini, end_row=r, end_column=col_ini+1)
         cl = ws.cell(row=r, column=col_ini, value=titulo)
-        cl.font = fnt_white; cl.alignment = aln_center; cl.fill = fill_header
-        ws.cell(row=r, column=col_ini).border = borde
+        cl.font = fnt_white
+        cl.alignment = aln_center
+        cl.fill = fill_header
+        cl.border = borde
         ws.cell(row=r, column=col_ini+1).border = borde
 
-    # Título
-    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
-    cl = ws.cell(row=fila, column=1, value='BALANCE GENERAL')
-    cl.font = fnt_titulo; cl.alignment = aln_center
-    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde
-    ws.row_dimensions[fila].height = 18; fila += 1
-
-    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
-    cl = ws.cell(row=fila, column=1, value=nombre_empresa)
-    cl.font = fnt_bold; cl.alignment = aln_center
-    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde; fila += 1
-
-    ws.merge_cells(start_row=fila, start_column=1, end_row=fila, end_column=5)
-    cl = ws.cell(row=fila, column=1, value=f"Al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)")
-    cl.font = Font(size=9); cl.alignment = aln_center
-    for c in range(1, 6): ws.cell(row=fila, column=c).border = borde
+    # ==================== ENCABEZADO ====================
+    merge(fila, 1, 5, 'BALANCE GENERAL', fnt_titulo, PatternFill(fill_type=None), 18)
+    fila += 1
+    merge(fila, 1, 5, nombre_empresa, fnt_bold, PatternFill(fill_type=None))
+    fila += 1
+    merge(fila, 1, 5, f"Al {fecha_hasta.strftime('%d/%m/%Y')} — (Expresado en Quetzales)", Font(size=9), PatternFill(fill_type=None), 12)
     fila += 2
 
-    # Encabezados de columna
+    # ==================== ENCABEZADOS DE COLUMNA ====================
     encabezado_col(fila, 1, 'ACTIVO')
     ws.cell(row=fila, column=3).border = borde
     encabezado_col(fila, 4, 'PASIVO + CAPITAL')
-    ws.row_dimensions[fila].height = 14; fila += 1
+    ws.row_dimensions[fila].height = 14
+    fila += 1
 
     fila_inicio = fila
 
     # ── ACTIVO ──
     fila_act = fila
     for grupo in datos['activo']['grupos']:
-        ws.merge_cells(start_row=fila_act, start_column=1, end_row=fila_act, end_column=2)
-        cl = ws.cell(row=fila_act, column=1, value=grupo['nombre'].upper())
-        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
-        ws.cell(row=fila_act, column=2).fill = fill_sec; ws.cell(row=fila_act, column=2).border = borde
+        merge(fila_act, 1, 2, grupo['nombre'].upper(), fnt_bold, fill_sec)
         fila_act += 1
 
         for i, c in enumerate(grupo['cuentas']):
@@ -2649,11 +2721,11 @@ def balance_general_excel(request):
             cel(fila_act, 2, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
             fila_act += 1
 
-        cel(fila_act, 1, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        merge(fila_act, 1, 1, f"Total {grupo['nombre']}", fnt_bold, fill_subtot)
         cel(fila_act, 2, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
         fila_act += 1
 
-    cel(fila_act, 1, 'TOTAL ACTIVO', fuente=fnt_white, aln=aln_right, relleno=fill_total)
+    merge(fila_act, 1, 1, 'TOTAL ACTIVO', fnt_white, fill_total)
     cel(fila_act, 2, float(datos['activo']['total']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
     fila_act += 1
 
@@ -2661,17 +2733,11 @@ def balance_general_excel(request):
     fila_pas = fila
 
     # Encabezado PASIVO
-    ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
-    cl = ws.cell(row=fila_pas, column=4, value='PASIVO')
-    cl.font = fnt_white; cl.fill = fill_header; cl.alignment = aln_center; cl.border = borde
-    ws.cell(row=fila_pas, column=5).fill = fill_header; ws.cell(row=fila_pas, column=5).border = borde
+    merge(fila_pas, 4, 5, 'PASIVO', fnt_white, fill_header)
     fila_pas += 1
 
     for grupo in datos['pasivo']['grupos']:
-        ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
-        cl = ws.cell(row=fila_pas, column=4, value=grupo['nombre'].upper())
-        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
-        ws.cell(row=fila_pas, column=5).fill = fill_sec; ws.cell(row=fila_pas, column=5).border = borde
+        merge(fila_pas, 4, 5, grupo['nombre'].upper(), fnt_bold, fill_sec)
         fila_pas += 1
 
         for i, c in enumerate(grupo['cuentas']):
@@ -2680,26 +2746,20 @@ def balance_general_excel(request):
             cel(fila_pas, 5, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
             fila_pas += 1
 
-        cel(fila_pas, 4, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        merge(fila_pas, 4, 4, f"Total {grupo['nombre']}", fnt_bold, fill_subtot)
         cel(fila_pas, 5, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
         fila_pas += 1
 
-    cel(fila_pas, 4, 'TOTAL PASIVO', fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2)
+    merge(fila_pas, 4, 4, 'TOTAL PASIVO', fnt_bold, fill_subtot2)
     cel(fila_pas, 5, float(datos['pasivo']['total']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2, fmt='#,##0.00')
     fila_pas += 1
 
     # Encabezado CAPITAL
-    ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
-    cl = ws.cell(row=fila_pas, column=4, value='CAPITAL')
-    cl.font = fnt_white; cl.fill = fill_header; cl.alignment = aln_center; cl.border = borde
-    ws.cell(row=fila_pas, column=5).fill = fill_header; ws.cell(row=fila_pas, column=5).border = borde
+    merge(fila_pas, 4, 5, 'CAPITAL', fnt_white, fill_header)
     fila_pas += 1
 
     for grupo in datos['capital']['grupos']:
-        ws.merge_cells(start_row=fila_pas, start_column=4, end_row=fila_pas, end_column=5)
-        cl = ws.cell(row=fila_pas, column=4, value=grupo['nombre'].upper())
-        cl.font = fnt_bold; cl.fill = fill_sec; cl.border = borde
-        ws.cell(row=fila_pas, column=5).fill = fill_sec; ws.cell(row=fila_pas, column=5).border = borde
+        merge(fila_pas, 4, 5, grupo['nombre'].upper(), fnt_bold, fill_sec)
         fila_pas += 1
 
         for i, c in enumerate(grupo['cuentas']):
@@ -2708,36 +2768,36 @@ def balance_general_excel(request):
             cel(fila_pas, 5, float(c['saldo']), fuente=fnt_normal, aln=aln_right, relleno=rf, fmt='#,##0.00')
             fila_pas += 1
 
-        cel(fila_pas, 4, f"Total {grupo['nombre']}", fuente=fnt_bold, aln=aln_right, relleno=fill_subtot)
+        merge(fila_pas, 4, 4, f"Total {grupo['nombre']}", fnt_bold, fill_subtot)
         cel(fila_pas, 5, float(grupo['subtotal']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot, fmt='#,##0.00')
         fila_pas += 1
 
     # Utilidad/Pérdida
-    lbl_util = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Pérdida del Ejercicio'
-    fill_u = fill_util if datos['capital']['es_utilidad'] else fill_perd
-    fnt_u  = fnt_util  if datos['capital']['es_utilidad'] else fnt_perd
-    val_u  = float(datos['capital']['utilidad_ejercicio'])
-    if not datos['capital']['es_utilidad']:
-        val_u = -val_u
-    cel(fila_pas, 4, lbl_util, fuente=fnt_u, aln=aln_left, relleno=fill_u)
-    cel(fila_pas, 5, val_u, fuente=fnt_u, aln=aln_right, relleno=fill_u, fmt='#,##0.00')
-    fila_pas += 1
+    if datos['capital']['utilidad_ejercicio'] != 0:
+        lbl_util = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Pérdida del Ejercicio'
+        fill_u = fill_util if datos['capital']['es_utilidad'] else fill_perd
+        fnt_u = fnt_util if datos['capital']['es_utilidad'] else fnt_perd
+        val_u = float(datos['capital']['utilidad_ejercicio'])
+        cel(fila_pas, 4, lbl_util, fuente=fnt_u, aln=aln_left, relleno=fill_u)
+        cel(fila_pas, 5, val_u, fuente=fnt_u, aln=aln_right, relleno=fill_u, fmt='#,##0.00')
+        fila_pas += 1
 
-    cel(fila_pas, 4, 'TOTAL CAPITAL', fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2)
+    merge(fila_pas, 4, 4, 'TOTAL CAPITAL', fnt_bold, fill_subtot2)
     cel(fila_pas, 5, float(datos['capital']['total']), fuente=fnt_bold, aln=aln_right, relleno=fill_subtot2, fmt='#,##0.00')
     fila_pas += 1
 
-    cel(fila_pas, 4, 'TOTAL PASIVO + CAPITAL', fuente=fnt_white, aln=aln_right, relleno=fill_total)
+    merge(fila_pas, 4, 4, 'TOTAL PASIVO + CAPITAL', fnt_white, fill_total)
     cel(fila_pas, 5, float(datos['total_pasivo_capital']), fuente=fnt_white, aln=aln_right, relleno=fill_total, fmt='#,##0.00')
 
     # Columna separadora vacía
     for r in range(fila_inicio, max(fila_act, fila_pas) + 1):
         ws.cell(row=r, column=3).border = borde
 
-    ws.page_setup.paperSize   = ws.PAPERSIZE_LETTER
+    # ==================== CONFIGURACIÓN ====================
+    ws.page_setup.paperSize = ws.PAPERSIZE_LETTER
     ws.page_setup.orientation = 'landscape'
-    ws.page_setup.fitToPage   = True
-    ws.page_setup.fitToWidth  = 1
+    ws.page_setup.fitToPage = True
+    ws.page_setup.fitToWidth = 1
 
     nombre = f"BalanceGeneral_{nombre_empresa.replace(' ','_')}_{fecha_hasta.strftime('%Y%m%d')}.xlsx"
     response = HttpResponse(content_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
@@ -2756,11 +2816,15 @@ def balance_general_pdf(request):
         messages.error(request, 'xhtml2pdf no está instalado.')
         return redirect('balance_general')
 
-    empresa, periodo, fecha_hasta, datos = _get_balance_general_datos(request)
+    empresa, periodo, fecha_desde, fecha_hasta, datos, paginas, folio_inicial, mes_inicio, mes_final = _get_balance_general_datos(request)
 
     if empresa is None:
         messages.warning(request, 'Debe seleccionar una empresa y un período activo')
         return redirect('home')
+
+    if not datos:
+        messages.warning(request, 'No hay datos para exportar')
+        return redirect('balance_general')
 
     nombre_empresa = empresa.razon_social or empresa.nombre_comercial
 
@@ -2793,12 +2857,10 @@ def balance_general_pdf(request):
                 rows += f'<tr class="{cls}"><td class="ind">{c["cuenta"].nombre}</td><td class="num">{c["saldo"]:,.2f}</td></tr>'
             rows += f'<tr class="sub"><td>Total {grupo["nombre"]}</td><td class="num">{grupo["subtotal"]:,.2f}</td></tr>'
 
-        lbl = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Perdida del Ejercicio'
-        cls_u = 'util' if datos['capital']['es_utilidad'] else 'perd'
-        val_u = datos['capital']['utilidad_ejercicio']
-        if not datos['capital']['es_utilidad']:
-            rows += f'<tr class="{cls_u}"><td class="ind">{lbl}</td><td class="num">({val_u:,.2f})</td></tr>'
-        else:
+        if datos['capital']['utilidad_ejercicio'] != 0:
+            lbl = 'Utilidad del Ejercicio' if datos['capital']['es_utilidad'] else 'Perdida del Ejercicio'
+            cls_u = 'util' if datos['capital']['es_utilidad'] else 'perd'
+            val_u = datos['capital']['utilidad_ejercicio']
             rows += f'<tr class="{cls_u}"><td class="ind">{lbl}</td><td class="num">{val_u:,.2f}</td></tr>'
 
         rows += f'<tr class="sub2"><td>TOTAL CAPITAL</td><td class="num">{datos["capital"]["total"]:,.2f}</td></tr>'
@@ -2808,7 +2870,7 @@ def balance_general_pdf(request):
     html = f"""<!DOCTYPE html>
 <html><head><meta charset="utf-8">
 <style>
-  @page {{ size: letter portrait; margin: 1.5cm 1.8cm; }}
+  @page {{ size: letter landscape; margin: 1.5cm 1.8cm; }}
   body {{ font-family: Arial, Helvetica, sans-serif; font-size: 8.5pt; color: #000; margin: 0; }}
   .enc-tabla {{ width: 100%; border-collapse: collapse; margin-bottom: 6pt; border: none; }}
   .enc-tabla td {{ border: none; padding: 0 2pt; background: white; }}
@@ -2839,6 +2901,7 @@ def balance_general_pdf(request):
               border-top: 1.5pt solid #000; border-bottom: 1.5pt solid #000; }}
   .util td {{ background-color: #D1FAE5; color: #065F46; font-weight: bold; }}
   .perd td {{ background-color: #FEE2E2; color: #991B1B; font-weight: bold; }}
+  .folio {{ text-align: right; font-size: 8.5pt; color: #333; white-space: nowrap; }}
 </style></head><body>
 <table class="enc-tabla">
   <tr>
@@ -2848,6 +2911,7 @@ def balance_general_pdf(request):
       <div class="enc-fechas">Al {fecha_hasta.strftime('%d/%m/%Y')}</div>
       <div class="enc-moneda">(Expresado en Quetzales)</div>
     </td>
+    <td class="folio">Folio No. {folio_inicial}</td>
   </tr>
 </table>
 <table class="columnas">
@@ -2879,7 +2943,6 @@ def balance_general_pdf(request):
     response = HttpResponse(buffer, content_type='application/pdf')
     response['Content-Disposition'] = f'attachment; filename="{nombre}"'
     return response
-
 
 # ==================== BALANCE DE SALDOS ====================
 def _get_balance_saldos_datos(request):

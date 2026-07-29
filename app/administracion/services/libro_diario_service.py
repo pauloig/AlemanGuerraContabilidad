@@ -80,12 +80,18 @@ class LibroDiarioService:
                     'haber': mov.monto if not es_debe else Decimal('0'),
                 })
 
-                for det in mov.detalles.all():
+                # Obtener todos los detalles para saber cuál es el último
+                detalles = list(mov.detalles.all())
+                num_detalles = len(detalles)
+                
+                for idx, det in enumerate(detalles):
+                    es_ultimo_detalle = (idx == num_detalles - 1)
                     filas.append({
                         'tipo':          'detalle',
                         'cuenta_nombre': (det.nombre.strip() if det.nombre and det.nombre.strip() else (det.descripcion.strip() if det.descripcion and det.descripcion.strip() else '- sin descripcion -')),
                         'debe':  det.monto if es_debe else Decimal('0'),
                         'haber': det.monto if not es_debe else Decimal('0'),
+                        'es_ultimo_detalle': es_ultimo_detalle,  # 🔴 NUEVA BANDERA
                     })
 
             filas.append({
@@ -154,6 +160,7 @@ class LibroDiarioService:
                         '_asiento_haber':        bloque['total_haber'],
                         '_es_ultima_de_asiento': fila['tipo'] == 'espacio',
                         'asiento_id':            bloque['asiento_id'],
+                        'es_ultimo_detalle':     fila.get('es_ultimo_detalle', False),  # 🔴 NUEVO
                     })
                     primer = False
 
